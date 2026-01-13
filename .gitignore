@@ -1,0 +1,15 @@
+# Ignore everything
+*
+
+# Keep these folders
+!hypr/
+!waybar/
+!kitty/
+
+# Keep their contents
+!hypr/**
+!waybar/**
+!kitty/**
+
+# Keep the .gitignore itself
+!.gitignore
