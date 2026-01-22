@@ -5,11 +5,17 @@
 !hypr/
 !waybar/
 !kitty/
+!flameshot/
+!rofi/
 
 # Keep their contents
 !hypr/**
 !waybar/**
 !kitty/**
+!flameshot/**
+!rofi/**
 
 # Keep the .gitignore itself
 !.gitignore
+!*.md
+!greenclip.toml
