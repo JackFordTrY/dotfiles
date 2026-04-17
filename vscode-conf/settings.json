@@ -1,0 +1,33 @@
+{
+    "security.workspace.trust.untrustedFiles": "open",
+    "git.enableSmartCommit": true,
+    "explorer.confirmDelete": false,
+    "explorer.confirmDragAndDrop": false,
+    "files.trimTrailingWhitespace": true,
+    "editor.minimap.enabled": false,
+    "extensions.ignoreRecommendations": true,
+    "git.confirmSync": false,
+    "editor.tabCompletion": "onlySnippets",
+    "[snippets]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "security.allowedUNCHosts": [
+        "wsl.localhost"
+    ],
+    "editor.unicodeHighlight.ambiguousCharacters": false,
+    "[typescript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features",
+        "editor.tabSize": 2
+    },
+    "[html]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.tabSize": 2
+    },
+    "git-buttons.showGitSync": true,
+    "git-buttons.showGitStashApply": true,
+    "git-buttons.showGitStashPop": true,
+    "git-buttons.showGitCheckout": true,
+    "typescript.updateImportsOnFileMove.enabled": "always",
+    "javascript.updateImportsOnFileMove.enabled": "always",
+    "editor.fontFamily": "JetBrains Mono"
+}
