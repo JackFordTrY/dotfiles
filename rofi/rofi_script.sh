@@ -47,10 +47,7 @@ case $ROFI_RETV in
     # Handle regular select (kb-accept-entry, default <Enter>)
     1)
         if [ ! "$ROFI_INFO" = "" ]; then
-            coproc {
-                clipvault get "$ROFI_INFO" | wl-copy
-                wtype "$(clipvault get "$ROFI_INFO")"
-            }
+            clipvault get "$ROFI_INFO" | wl-copy
         fi
         exit
         ;;
