@@ -13,10 +13,44 @@ This workspace contains personal Linux desktop configuration, mainly centered ar
 - wtype
 - bluez + bluez-utils
 - discord + xdg-desktop-portal-hyprland
+- ark + dolphin + kio + kio-extras + kservice
+- archlinux-xdg-menu
+- 7zip + unzip + unrar
 
 ## Fonts
 
 - ttf-jetbrains-mono
+
+## Commands to run
+
+xdg-mime default org.kde.dolphin.desktop inode/directory
+
+## Archive support with Ark
+
+To open archive files from `dolphin` under Hyprland, install the KDE file integration and archive tools:
+
+`sudo pacman -S ark dolphin kio kio-extras kservice archlinux-xdg-menu 7zip unzip unrar`
+
+### KDE menu/cache fix
+
+Hyprland often needs the KDE app menu cache rebuilt manually:
+
+`XDG_MENU_PREFIX=arch- kbuildsycoca6 --noincremental`
+
+### Persistent Hyprland environment
+
+Add these environment variables to the Hyprland config so KDE menu integration keeps working:
+
+- `env = XDG_MENU_PREFIX,arch-`
+- `env = XDG_CURRENT_DESKTOP,Hyprland`
+
+### Default archive associations
+
+Set `ark` as the default app for common archive MIME types:
+
+- `xdg-mime default org.kde.ark.desktop application/zip`
+- `xdg-mime default org.kde.ark.desktop application/x-7z-compressed`
+- `xdg-mime default org.kde.ark.desktop application/x-rar`
 
 ## Hyprland variables
 
@@ -102,7 +136,7 @@ The active theme is the **Purple Night** palette.
 | Shortcut | Action |
 | --- | --- |
 | `CONTROL + Q` | Toggle special workspace `kitty` |
-| `CONTROL + SHIFT + T` | Toggle special workspace `trash` |
+| `SUPER + SHIFT + T` | Toggle special workspace `trash` |
 | `CONTROL + SHIFT + Y` | Toggle special workspace `ytmusic` |
 | `SUPER + T` | Move active window to special workspace `trash` |
 

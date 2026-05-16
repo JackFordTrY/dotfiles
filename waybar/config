@@ -1,0 +1,28 @@
+{
+    "layer": "top",
+    "margin-bottom": 0,
+    "margin-left": 0,
+    "margin-right": 0,
+    "spacing": 0,
+    "include": [
+        "~/.config/waybar/themes/starter/modules.jsonc"
+    ],
+    "modules-left": [
+        "custom/appmenu",
+        "custom/settings",
+        "hyprland/window"
+    ],
+    "modules-center": [
+        "hyprland/workspaces"
+    ],
+    "modules-right": [
+        "hyprland/language",
+        "pulseaudio",
+        "bluetooth",
+        "battery",
+        "network",
+        "group/hardware",
+        "custom/exit",
+        "clock"
+    ]
+}

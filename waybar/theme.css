@@ -1,29 +1,62 @@
-:root {
-  --bg0: #0d0b14;
-  --bg1: #141225;
-  --bg2: #1b1733;
+@define-color bg0 #0d0b14;
+@define-color bg1 #141225;
+@define-color bg2 #1b1733;
+@define-color bg3 #221d3d;
+@define-color bg4 #2b2550;
 
-  --fg0: #e6e1ff;
-  --fg1: #b9b4d6;
-  --fg2: #8f8aa8;
+@define-color fg0 #e6e1ff;
+@define-color fg1 #b9b4d6;
+@define-color fg2 #8f8aa8;
+@define-color fg3 #6f6a8d;
 
-  --purple0: #6c63ff;
-  --purple1: #857bff;
-  --purple2: #a599ff;
-  --purpleMuted: #3a3561;
+@define-color purple0 #6c63ff;
+@define-color purple1 #857bff;
+@define-color purple2 #a599ff;
+@define-color purpleMuted #3a3561;
+@define-color purpleDeep #2a2747;
+@define-color purpleGlow rgba(108, 99, 255, 0.18);
+@define-color purpleGlowStrong rgba(108, 99, 255, 0.32);
 
-  --pink: #ff79c6;
-  --cyan: #7afcff;
-  --blue: #4da6ff;
-  --green: #4dffb5;
-  --yellow: #f1fa8c;
-  --red: #ff5555;
+@define-color pink #ff79c6;
+@define-color cyan #7afcff;
+@define-color blue #4da6ff;
+@define-color green #4dffb5;
+@define-color yellow #f1fa8c;
+@define-color red #ff5555;
 
-  --border-active: var(--purple0);
-  --border-inactive: var(--purpleMuted);
-  --border-urgent: var(--red);
+@define-color surface0 #0d0b14;
+@define-color surface1 #100f1a;
+@define-color surface2 #141225;
+@define-color surface3 #1b1733;
+@define-color surface4 #221d3d;
+@define-color surface5 #2b2550;
 
-  --shadow: rgba(108, 99, 255, 0.35);
-  --selection-bg: var(--purpleMuted);
-  --selection-fg: var(--fg0);
-}
+@define-color textPrimary #e6e1ff;
+@define-color textSecondary #b9b4d6;
+@define-color textMuted #8f8aa8;
+@define-color textDim #6f6a8d;
+
+@define-color accentSoft #2a2747;
+@define-color accentMid #3a3561;
+@define-color accentStrong #857bff;
+
+@define-color infoSoft rgba(77, 166, 255, 0.18);
+@define-color successSoft rgba(77, 255, 181, 0.18);
+@define-color warningSoft rgba(241, 250, 140, 0.18);
+@define-color dangerSoft rgba(255, 85, 85, 0.20);
+
+@define-color borderActive #6c63ff;
+@define-color borderInactive #3a3561;
+@define-color borderUrgent #ff5555;
+
+@define-color shadow rgba(108, 99, 255, 0.35);
+@define-color selectionBg #3a3561;
+@define-color selectionFg #e6e1ff;
+
+
+
+
+
+
+
+
