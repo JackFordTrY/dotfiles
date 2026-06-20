@@ -156,6 +156,22 @@
         // "icon-size": 21,
         "spacing": 10
     },
+    "custom/tray-toggle": {
+        "format": "",
+        "tooltip": false
+    },
+    "group/tray": {
+        "orientation": "inherit",
+        "drawer": {
+            "transition-duration": 300,
+            "children-class": "tray-item",
+            "transition-left-to-right": false
+        },
+        "modules": [
+            "custom/tray-toggle",
+            "tray"
+        ]
+    },
     // Clock
     "clock": {
         "format": "{:%H:%M %a}",

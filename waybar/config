@@ -1,5 +1,7 @@
 {
     "layer": "top",
+    "position": "bottom",
+    "exclusive": true,
     "margin-bottom": 0,
     "margin-left": 0,
     "margin-right": 0,
@@ -8,6 +10,7 @@
         "~/.config/waybar/themes/starter/modules.jsonc"
     ],
     "modules-left": [
+        "group/hardware",
         "custom/appmenu",
         "custom/settings",
         "hyprland/window"
@@ -21,7 +24,7 @@
         "bluetooth",
         "battery",
         "network",
-        "group/hardware",
+        "group/tray",
         "custom/exit",
         "clock"
     ]
