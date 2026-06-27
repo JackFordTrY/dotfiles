@@ -3,16 +3,15 @@
     "position": "bottom",
     "exclusive": true,
     "margin-bottom": 0,
-    "margin-left": 0,
-    "margin-right": 0,
+    "margin-left": 10,
+    "margin-right": 10,
     "spacing": 0,
     "include": [
         "~/.config/waybar/themes/starter/modules.jsonc"
     ],
     "modules-left": [
         "group/hardware",
-        "custom/appmenu",
-        "custom/settings",
+        "group/special",
         "hyprland/window"
     ],
     "modules-center": [

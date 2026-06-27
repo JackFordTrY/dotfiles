@@ -1,4 +1,43 @@
 {
+    // Special workspaces drawer (collapsing shortcut)
+    "group/special": {
+        "orientation": "inherit",
+        "drawer": {
+            "transition-duration": 300,
+            "children-class": "special-item",
+            "transition-left-to-right": true,
+            "click-to-reveal": true
+        },
+        "modules": [
+            "custom/special-toggle",
+            "custom/special-kitty",
+            "custom/special-ytmusic",
+            "custom/special-trash"
+        ]
+    },
+    "custom/special-toggle": {
+        "format": "",
+        "tooltip": true,
+        "tooltip-format": "Special workspaces"
+    },
+    "custom/special-kitty": {
+        "format": "",
+        "on-click": "hyprctl dispatch togglespecialworkspace kitty",
+        "tooltip": true,
+        "tooltip-format": "Terminal scratchpad"
+    },
+    "custom/special-ytmusic": {
+        "format": "",
+        "on-click": "hyprctl dispatch togglespecialworkspace ytmusic",
+        "tooltip": true,
+        "tooltip-format": "YouTube Music"
+    },
+    "custom/special-trash": {
+        "format": "",
+        "on-click": "hyprctl dispatch togglespecialworkspace trash",
+        "tooltip": true,
+        "tooltip-format": "Trash"
+    },
     // Workspaces
     "hyprland/workspaces": {
         "on-click": "activate",
