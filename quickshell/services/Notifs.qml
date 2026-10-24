@@ -13,11 +13,14 @@ import Quickshell.Services.Notifications
 // actions. Bindings that should follow a replaced notification read through `notification`
 // rather than the copies.
 //
-// `qs ipc call notifications toggleSilence` and `... clear` are there for keybindings.
+// A silence can have an end (`silenceUntil`, from the bell's menu), when banners come back on
+// their own. `qs ipc call notifications toggleSilence` and `... clear` are there for keybindings.
 Singleton {
     id: root
 
     property bool silenced: false
+    // When the silence ends by itself (ms since the epoch), or 0 for when it's turned back on
+    property real silencedUntil: 0
     // Set by new arrivals, cleared once the history has been looked at
     property bool unread: false
     property var history: []
@@ -195,9 +198,23 @@ Singleton {
         });
     }
 
+    // Silences until `until` (ms since the epoch), or until turned back on for 0
+    function silenceUntil(until: real) {
+        silencedUntil = until;
+        silenced = true;
+    }
+
     onSilencedChanged: {
         if (silenced)
             popups = [];
+        else
+            silencedUntil = 0;
+    }
+
+    Timer {
+        running: root.silenced && root.silencedUntil > 0
+        interval: Math.max(1000, root.silencedUntil - Date.now())
+        onTriggered: root.silenced = false
     }
 
     Timer {

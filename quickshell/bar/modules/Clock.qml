@@ -3,17 +3,12 @@ import Quickshell
 import qs.config
 import qs.components
 
-// The time over the date in small spaced caps ("14:32" / "SAT 24 OCT"), the full date in the
-// tooltip; left click opens the ml4w calendar.
+// The time over the date in small spaced caps ("14:32" / "SAT 24 OCT"); hovering it shows the
+// month in the right tab's panel (see Controls).
 TabItem {
     id: root
 
     padding: 8
-    tooltip: Qt.formatDateTime(clock.date, "dddd, d MMMM yyyy")
-    onClicked: button => {
-        if (button === Qt.LeftButton)
-            Quickshell.execDetached(["sh", "-c", "flatpak run com.ml4w.calendar"]);
-    }
 
     Column {
         anchors.verticalCenter: parent.verticalCenter

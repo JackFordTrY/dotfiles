@@ -7,10 +7,10 @@ import Quickshell.Wayland
 import qs.config
 import qs.components
 
-// A panel in the middle of the screen with a search field on top, for the launcher and the
-// clipboard picker; children go under the field. It covers the whole screen while open, so a
-// click outside the panel closes it, and is mapped only while open and fading out. Escape closes
-// it; other keys go to `keyPressed` first.
+// A panel in the middle of the screen with a search field on top, for the launcher, the clipboard
+// picker and the overview; children go under the field, `above` over everything (menus). It
+// covers the whole screen while open, so a click outside the panel closes it, and is mapped only
+// while open and fading out. Keys go to `keyPressed` first; Escape closes it unless that took it.
 PanelWindow {
     id: root
 
@@ -19,6 +19,7 @@ PanelWindow {
     property real panelWidth: 640
     readonly property string query: search.text
     default property alias content: column.data
+    property alias above: above.data
 
     // Before it shows, with the query cleared
     signal opened
@@ -140,11 +141,10 @@ PanelWindow {
                     clip: true
                     focus: true
                     Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Escape) {
+                        root.keyPressed(event);
+                        if (!event.accepted && event.key === Qt.Key_Escape) {
                             root.close();
                             event.accepted = true;
-                        } else {
-                            root.keyPressed(event);
                         }
                     }
 
@@ -156,6 +156,12 @@ PanelWindow {
                     }
                 }
             }
+        }
+
+        Item {
+            id: above
+
+            anchors.fill: parent
         }
     }
 }

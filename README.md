@@ -9,7 +9,10 @@ Hyprland config is split into:
 - `hypr/hyprland.conf` — main config (monitors, autostart, env, look & feel)
 - `hypr/_variables.conf` — `$`-variables (apps, colors)
 - `hypr/_bindings.conf` — all keybindings + the gaming submap
-- `hypr/_rules.conf` — window rules + layer rules
+- `hypr/_rules.conf` — window rules + layer rules (file pickers float centred at 55% × 65%,
+  whether the portal's window or an app's own "Open Files"-style dialog)
+
+Ideas not built yet are kept in [IDEAS.md](IDEAS.md).
 
 ## Packages
 
@@ -104,6 +107,9 @@ Hovering the robot or the RAM grows the left tab into a panel:
 
 - CPU, RAM and disk ring gauges with gradient arcs (hover for per-core usage / sizes)
 - a two-minute CPU + RAM usage graph
+- your five busiest processes (measured by `top` over a second, every couple of seconds while the
+  panel is open), with CPU and memory; the cross ends one after a second click (*End?*). The
+  session's own processes (Hyprland, the shell, audio) have no cross
 - a chip per special workspace that's open (Hyprland drops one once its last window goes), lit
   while it's showing and with its window count past one; click to toggle it. `kitty` (the
   terminal scratchpad) and `trash` get their own icons
@@ -126,6 +132,11 @@ screen never goes black).
   back to `nmtui`.
 - **Bluetooth** — paired devices with battery level, plus nearby ones while **Scan** is on.
   Click to connect or disconnect; a new device is paired, trusted and connected.
+- **Calendar** — hover the clock: today's weather (now, the day's range and feels-like, from
+  wttr.in for where the connection is; fetched when the page opens and older than half an hour)
+  over the month with today marked, weeks starting on the locale's first day. The arrows or the
+  wheel page through the months (*Today* comes back); it's on the current month whenever the
+  panel opens.
 - **Tray** — along the bottom of every page. Tray menus keep the panel open while they're up.
 
 Every page gets the same room, so the panel keeps one size and pages cross-fade; long lists
@@ -145,6 +156,8 @@ cover blurred behind it all. Players with their own volume (mpv, VLC, Spotify...
 slider for it; it moves the player's volume, not its stream in the mixer. Browsers advertise one
 that's fixed at 100%, so they don't get the slider. A paused title stays in the bar, dimmed, for
 three minutes (so it can be resumed from the media page), and while the panel is open on it.
+Scrolling on the title sets the volume 5% a notch, the equalizer showing the level meanwhile: the
+player's own where it has a real one, else (browsers) its app's stream in the mixer.
 
 ### Workspaces
 
@@ -162,6 +175,10 @@ pill, empty ones are dimmed and urgent ones turn red. Icons and names live in `k
 
 ### Modules
 
+- **Recording** — a pulsing red dot at the start of the right tab, with a mic, screen or camera
+  icon, while something records the microphone (Pipewire input streams), takes video (Pipewire
+  video streams) or casts the screen (Hyprland's `screencast` event; the overview's own previews
+  don't count). The tooltip names the apps; a click brings up the first one.
 - **RAM** — a memory stick that fills with the load and shifts cyan → purple → pink → red, and
   the percentage. Click brings up GNOME Resources floating at 35% × 25%, centred on the current
   workspace (an open Resources window is moved there).
@@ -173,7 +190,8 @@ pill, empty ones are dimmed and urgent ones turn red. Icons and names live in `k
 - **Power** — click shrinks the right panel to four icons: suspend, log out, reboot, shut down.
   Suspend acts at once; the other three turn into a check mark that has to be clicked again
   within 3 s. (No hibernate: logind reports it unavailable with zram-only swap. No lock: no
-  screen locker is installed.) **Clock** — the time over the date; click opens the calendar.
+  screen locker is installed.) **Clock** — the time over the date; hovering or clicking it shows
+  the month (the calendar page below).
 
 ### Quickshell
 
@@ -184,13 +202,18 @@ quickshell/
 ├── components/        EdgeShape (edge-grown outline), Tab / TabItem, Popout (tab that grows
 │                      into a panel), MaterialIcon, StyledText, StyledSlider, SectionLabel,
 │                      Divider, Chip, PageSlot, CircularGauge, HistoryGraph, Equalizer,
-│                      Tooltip, TrayMenu, ThemedIcon, NotificationContent, FloatingPanel
+│                      Tooltip, TrayMenu, ThemedIcon, NotificationContent, FloatingPanel,
+│                      ContextMenu
 ├── services/          Notifs (notification daemon + history), Audio (Pipewire sinks + app
 │                      streams), Players (MPRIS), SystemStats, NetworkInfo (nl80211 scan
-│                      signal), BatteryInfo (sysfs), KeyboardLayout, AudioPorts
-├── notifications/     Popups.qml, the banners dropping from the top edge
-├── launcher/          Launcher.qml (SUPER + R) and Clipboard.qml (SUPER + V), on Overlay.qml
-├── rules/             FolderWorkspaces.qml, VS Code windows to their folder's workspace
+│                      signal), BatteryInfo (sysfs), KeyboardLayout, AudioPorts, Brightness,
+│                      Privacy (what's recording), Weather (wttr.in), Focus (no-warp focusing)
+├── notifications/     Popups.qml, the banners dropping from the top edge; Osd.qml, the volume
+│                      and brightness level
+├── launcher/          Launcher.qml (SUPER + R), Clipboard.qml (SUPER + V) and Overview.qml
+│                      (SUPER + Tab), on Overlay.qml
+├── rules/             FolderWorkspaces.qml, VS Code windows to their folder's workspace;
+│                      BatteryWarnings.qml
 └── bar/               Bar.qml; one file per module in bar/modules/ (System and Controls are
                        the tabs with panels); the panels' pages in bar/controls/
 ```
@@ -225,7 +248,9 @@ masked (`systemctl --user unmask dunst` to bring it back).
   panel. Entries stay until cleared there (the cross on an entry, or *Clear*), survive restarts
   (`~/.local/state/quickshell/.../notifications.json`) and can be clicked to follow later.
 - **Silence**: click the bell. It turns red and crossed out, banners stop, and notifications
-  still collect in the history. A dot on the bell means something unread.
+  still collect in the history. A dot on the bell means something unread. Right-click it to
+  silence for an hour or until 8:00 (banners come back by themselves; the tooltip says when), or
+  to turn them back on.
 - Keybindings can use `qs ipc call notifications toggleSilence` and `qs ipc call notifications
   clear`. The gaming-mode messages go through `notify-send`, so they look the same.
 - **Battery**: a notification at 15% and an urgent one at 5% (it stays until dismissed), each
@@ -248,8 +273,12 @@ first (the counts rofi left in `~/.cache/rofi3.druncache`, plus its own in
 - **List:** Up and Down move through it (Up from the top goes back to the pinned row), typing
   searches names (start, word starts, anywhere, then letters in order, matches in bold), then
   descriptions and keywords.
+- **Windows:** open windows whose title or app holds the query come first (up to four, with
+  their workspace); Enter switches to one instead of starting the app again.
+- **Actions:** a right click on an app (or Shift+Enter on the selection) lists its own actions,
+  e.g. Opera's *New Private Window* or VS Code's *New Empty Window*.
 - **Calculator:** arithmetic (`2*21`, `(3 + 4)^2 / 7`) shows its result on top; Enter copies it.
-- **Web search:** when no app matches, the only row searches Google for the query.
+- **Web search:** when nothing matches, the only row searches Google for the query.
 - **Enter** launches the selection, as does a click. **Escape**, SUPER + R again or a click
   outside the panel closes it.
 
@@ -270,12 +299,28 @@ clipboard toggle`): what `clipvault` stored, newest first, with a search field.
 - Rich text (a browser's bold or links) isn't kept: `wl-paste --watch clipvault store` saves
   one format per copy, the plain text.
 
+## Overview
+
+SUPER + Tab (`quickshell/launcher/Overview.qml`, through `qs ipc call overview toggle`) shows
+workspaces 1–5 and any other that's open, each over the wallpaper (read from
+`hypr/hyprpaper.conf`) with live previews of its windows where they sit on the screen.
+
+- Click a window to switch to it, or an empty spot to go to that workspace.
+- Drag a window onto another workspace to move it there (without following it).
+- The arrows or Tab step through the windows and Enter switches to the selected one; typing
+  dims the windows whose title or app doesn't hold it. Escape, SUPER + Tab again or a click
+  outside closes it.
+
 ## VS Code workspaces
 
 Every VS Code window opens on workspace 3 (the `code-window` rule). Windows on `~/work_lgfg` then
 move to workspace 4 and `~/work` stays on 3, once VS Code's title names the folder: Hyprland
 rules only see a new window's first title, so `quickshell/rules/FolderWorkspaces.qml` does this
 (each window once, so moving one by hand sticks). Add folders to its `folders` map.
+
+Alt+Shift switches the keyboard layout (`kb_options = grp:alt_shift_toggle`). VS Code moves
+focus to its menu bar when Alt is let go, which pulled the cursor out of the editor on every
+switch, so `window.customMenuBarAltFocus` is off in its settings.
 
 ## Hyprland variables
 
@@ -352,6 +397,7 @@ The active theme is the **Purple Night** palette.
 | `F4` | Launch terminal (`kitty`) |
 | `SUPER + E` | Launch file manager (`dolphin`) |
 | `SUPER + R` | Open or close the app launcher (the shell's) |
+| `SUPER + Tab` | Open or close the workspace overview |
 | `Print` | Flameshot GUI (`QT_SCALE_FACTOR="0.8"`) |
 | `SUPER + V` | Clipboard history: pick to paste (the shell's) |
 | `SUPER + M` | Exit (`hyprshutdown`, fallback `hyprctl dispatch exit`) |

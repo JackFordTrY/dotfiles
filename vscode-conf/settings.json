@@ -5,6 +5,7 @@
     "explorer.confirmDragAndDrop": false,
     "files.trimTrailingWhitespace": true,
     "window.controlsStyle": "hidden",
+    "window.customMenuBarAltFocus": false,
     "editor.minimap.enabled": false,
     "extensions.ignoreRecommendations": true,
     "git.confirmSync": false,

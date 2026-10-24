@@ -33,6 +33,9 @@ ShellRoot {
     // SUPER + V: the clipboard history, pasting what's picked
     Clipboard {}
 
+    // SUPER + Tab: every workspace with live window previews
+    Overview {}
+
     // VS Code windows to the workspace of their folder
     FolderWorkspaces {}
 

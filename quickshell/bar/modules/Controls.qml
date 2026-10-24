@@ -6,15 +6,16 @@ import qs.components
 import qs.services
 import qs.bar.controls
 
-// The right tab: the notification bell, language, the Wi-Fi / Bluetooth / volume icons, battery,
-// power and clock. Hovering or clicking one of those three icons grows the tab into a panel with
-// a tile for each (the tile's icon switches it on and off, the rest of the tile picks its page),
-// a brightness slider, that page, and the system tray along the bottom; hovering the bell shows
-// the notification history there. Clicking power shrinks it to just the power options.
+// The right tab: a red dot while something records, the notification bell, language, the Wi-Fi /
+// Bluetooth / volume icons, battery, power and clock. Hovering or clicking one of those three
+// icons grows the tab into a panel with a tile for each (the tile's icon switches it on and off,
+// the rest of the tile picks its page), a brightness slider, that page, and the system tray along
+// the bottom; hovering the bell shows the notification history there, and hovering the clock the
+// month. Clicking power shrinks it to just the power options.
 Popout {
     id: root
 
-    // wifi | bluetooth | sound | notifications | power
+    // wifi | bluetooth | sound | notifications | calendar | power
     property string page: "sound"
     // Every page but power gets this much room, so switching between them never resizes the
     // panel; the lists scroll inside it
@@ -24,7 +25,7 @@ Popout {
     // The bar's window is sized for the taller one, so switching never resizes it
     readonly property real maxHeight: Math.max(sections.implicitHeight, powerPage.implicitHeight) + 28 + Theme.tabHeight
     readonly property bool wantsKeyboard: open && page === "wifi" && wifiPage.wantsKeyboard
-    readonly property string hoveredPage: bell.hovered ? "notifications" : network.hovered ? "wifi" : bluetooth.hovered ? "bluetooth" : volume.hovered ? "sound" : ""
+    readonly property string hoveredPage: bell.hovered ? "notifications" : clock.hovered ? "calendar" : network.hovered ? "wifi" : bluetooth.hovered ? "bluetooth" : volume.hovered ? "sound" : ""
 
     function showPage(name: string) {
         page = name;
@@ -34,9 +35,9 @@ Popout {
     growOrigin: 1
     expandedWidth: 420
     expandedHeight: bodyHeight + 28 + Theme.tabHeight
-    trigger: status.hovered || bell.hovered
-    // Also stays open under a tray menu
-    pinned: wantsKeyboard || tray.menuOpen
+    trigger: status.hovered || bell.hovered || clock.hovered
+    // Also stays open under a tray menu or the bell's menu
+    pinned: wantsKeyboard || tray.menuOpen || bell.menuOpen
     onHoveredPageChanged: {
         if (hoveredPage !== "" && !wantsKeyboard)
             page = hoveredPage;
@@ -228,6 +229,15 @@ Popout {
                             active: root.page === "notifications" && root.open
                         }
                     }
+
+                    PageSlot {
+                        shown: root.page === "calendar"
+
+                        CalendarPage {
+                            anchors.fill: parent
+                            active: root.page === "calendar" && root.open
+                        }
+                    }
                 }
 
                 // Next to the bar, so it's quick to reach whichever page is showing. One row; a full
@@ -296,6 +306,15 @@ Popout {
                 onRan: root.open = false
             }
         }
+    }
+
+    // Only while something records the mic, screen or camera
+    RecordingDot {
+        id: recording
+    }
+
+    Divider {
+        visible: recording.visible
     }
 
     Bell {
@@ -371,5 +390,13 @@ Popout {
 
     Divider {}
 
-    Clock {}
+    Clock {
+        id: clock
+
+        active: root.open && root.page === "calendar"
+        onClicked: button => {
+            if (button === Qt.LeftButton)
+                root.showPage("calendar");
+        }
+    }
 }

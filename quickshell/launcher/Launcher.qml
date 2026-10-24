@@ -2,16 +2,20 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.config
 import qs.components
+import qs.services
 
 // The app launcher (SUPER + R runs `qs ipc call launcher toggle`): a row of pinned apps and every
 // app, most launched first, under the search field. Left and Right cycle round the pinned apps
 // (the row scrolls when they don't fit), Up and Down go through the list, typing searches it and
-// Enter launches the selection. Arithmetic ("2*21") shows its result on top, which Enter copies;
-// when no app matches, Enter searches the web. Escape, SUPER + R again or a click outside the
+// Enter launches the selection. Open windows matching the query come first, and Enter switches
+// to them instead of starting another; arithmetic ("2*21") shows its result on top, which Enter
+// copies; when nothing matches, Enter searches the web. A right click or Shift+Enter on an app
+// lists its own actions ("New Private Window"). Escape, SUPER + R again or a click outside the
 // panel closes it.
 Overlay {
     id: root
@@ -42,6 +46,8 @@ Overlay {
     readonly property int pinnedShown: 5
     // List rows shown at once
     readonly property int shownRows: 8
+    // Matching windows listed at most
+    readonly property int shownWindows: 4
 
     // Where the arrows and Enter act: "pinned" or "list"
     property string area: "pinned"
@@ -50,6 +56,9 @@ Overlay {
     // Launch counts rofi kept (~/.cache/rofi3.druncache, left behind when it was removed), so the
     // order it learned carries over; the launcher's own counts add to them
     property var rofiUses: ({})
+    // The app whose actions menu is up, and the action picked in it
+    property var actionsEntry: null
+    property int actionIndex: 0
 
     readonly property var pinnedApps: {
         // Looked up again when the entries change
@@ -85,8 +94,25 @@ Overlay {
         return found;
     }
 
-    // What the list shows: the result first when the query is arithmetic, then the apps, then a
-    // web search when no app matches
+    // Open windows whose title or app holds the query
+    readonly property var windows: {
+        const q = query.trim().toLowerCase();
+        if (q === "")
+            return [];
+        return Hyprland.toplevels.values.filter(t => t.title.toLowerCase().includes(q) || (t.wayland?.appId ?? "").toLowerCase().includes(q)).slice(0, shownWindows).map(t => {
+            const at = t.title.toLowerCase().indexOf(q);
+            return {
+                kind: "window",
+                toplevel: t,
+                at: at === -1 ? [] : Array.from({
+                    length: q.length
+                }, (_, i) => at + i)
+            };
+        });
+    }
+
+    // What the list shows: the result first when the query is arithmetic, then the windows and
+    // apps, then a web search when nothing matches
     readonly property var rows: {
         const q = query.trim();
         const answer = calculate(q);
@@ -95,7 +121,7 @@ Overlay {
                         kind: "calc",
                         value: answer
                     }
-                ]), ...results, ...(q !== "" && results.length === 0 ? [
+                ]), ...windows, ...results, ...(q !== "" && results.length === 0 && windows.length === 0 ? [
                     {
                         kind: "web"
                     }
@@ -182,6 +208,15 @@ Overlay {
         return out;
     }
 
+    // "Workspace 3", or a special workspace's name ("Kitty")
+    function workspaceLabel(workspace: var): string {
+        const name = workspace?.name ?? "";
+        if (!name.startsWith("special:"))
+            return "Workspace " + name;
+        const special = name.slice("special:".length);
+        return special.charAt(0).toUpperCase() + special.slice(1);
+    }
+
     // Into the pinned row on the first press, then round it, wrapping at the ends
     function stepPinned(step: int) {
         const count = pinnedApps.length;
@@ -225,18 +260,24 @@ Overlay {
             return;
         }
         close();
-        if (row.kind === "calc")
+        if (row.kind === "window")
+            Focus.run(["focuswindow address:0x" + row.toplevel.address]);
+        else if (row.kind === "calc")
             Quickshell.execDetached(["wl-copy", row.value]);
         else
             Quickshell.execDetached(["xdg-open", "https://www.google.com/search?q=" + encodeURIComponent(query.trim())]);
     }
 
-    function launch(entry: var, folder: string) {
-        close();
+    function counted(entry: var) {
         const uses = Object.assign({}, counts.uses);
         uses[entry.id] = (uses[entry.id] ?? 0) + 1;
         counts.uses = uses;
         store.writeAdapter();
+    }
+
+    function launch(entry: var, folder: string) {
+        close();
+        counted(entry);
         if (folder === "") {
             entry.execute();
             return;
@@ -245,20 +286,76 @@ Overlay {
         Quickshell.execDetached([...entry.command, Quickshell.env("HOME") + "/" + folder]);
     }
 
+    // Opens the actions menu of `entry` under `item` (above it near the panel's bottom)
+    function showActions(entry: var, item: var) {
+        if (!entry || entry.actions.length === 0)
+            return;
+        actionsEntry = entry;
+        actionIndex = 0;
+        const below = item.mapToItem(actionsMenu.parent, 0, item.height + 4);
+        actionsMenu.x = Math.min(below.x + 10, actionsMenu.parent.width - actionsMenu.width - 14);
+        actionsMenu.y = below.y + actionsMenu.height > actionsMenu.parent.height - 14 ? below.y - item.height - 8 - actionsMenu.height : below.y;
+    }
+
+    // The selection's actions, from Shift+Enter
+    function showSelectedActions() {
+        if (area === "pinned")
+            showActions(pinnedApps[pinnedIndex]?.entry, pinnedView.currentItem);
+        else if (rows[listIndex]?.kind === "app")
+            showActions(rows[listIndex].entry, list.currentItem);
+    }
+
+    function runAction(index: int) {
+        const entry = actionsEntry;
+        actionsEntry = null;
+        close();
+        counted(entry);
+        entry.actions[index].execute();
+    }
+
     WlrLayershell.namespace: "quickshell-launcher"
     onOpened: {
         area = "pinned";
         pinnedIndex = 0;
         listIndex = 0;
+        actionsEntry = null;
         pinnedView.positionViewAtBeginning();
         list.positionViewAtBeginning();
+        // Titles and workspaces as they are now
+        Hyprland.refreshToplevels();
     }
     onQueryChanged: {
         area = query.trim() === "" ? "pinned" : "list";
         listIndex = 0;
+        actionsEntry = null;
         list.positionViewAtBeginning();
     }
     onKeyPressed: event => {
+        // The actions menu takes the arrows, Enter and Escape while it's up
+        if (actionsEntry) {
+            const count = actionsEntry.actions.length;
+            switch (event.key) {
+            case Qt.Key_Up:
+                actionIndex = (actionIndex + count - 1) % count;
+                break;
+            case Qt.Key_Down:
+                actionIndex = (actionIndex + 1) % count;
+                break;
+            case Qt.Key_Return:
+            case Qt.Key_Enter:
+                runAction(actionIndex);
+                break;
+            case Qt.Key_Escape:
+            case Qt.Key_Left:
+            case Qt.Key_Right:
+                actionsEntry = null;
+                break;
+            default:
+                return;
+            }
+            event.accepted = true;
+            return;
+        }
         switch (event.key) {
         case Qt.Key_Left:
             stepPinned(-1);
@@ -280,7 +377,10 @@ Overlay {
             break;
         case Qt.Key_Return:
         case Qt.Key_Enter:
-            activate();
+            if (event.modifiers & Qt.ShiftModifier)
+                showSelectedActions();
+            else
+                activate();
             break;
         default:
             return;
@@ -367,6 +467,80 @@ Overlay {
         }
     }
 
+    above: [
+        // A click elsewhere in the panel closes the actions menu
+        MouseArea {
+            visible: root.actionsEntry !== null
+            anchors.fill: parent
+            onPressed: root.actionsEntry = null
+        },
+        Rectangle {
+            id: actionsMenu
+
+            visible: root.actionsEntry !== null
+            width: 260
+            height: actions.implicitHeight + 12
+            radius: 12
+            color: Theme.popupBackground
+            border.width: 1
+            border.color: Theme.purpleGlowStrong
+
+            Column {
+                id: actions
+
+                x: 6
+                y: 6
+                width: parent.width - 12
+
+                Repeater {
+                    model: root.actionsEntry?.actions ?? []
+
+                    Rectangle {
+                        id: action
+
+                        required property var modelData
+                        required property int index
+
+                        width: actions.width
+                        height: 34
+                        radius: 8
+                        color: index === root.actionIndex ? Theme.active : actionArea.containsMouse ? Theme.hover : "transparent"
+
+                        AppIcon {
+                            id: actionIcon
+
+                            x: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            entry: action.modelData.icon !== "" ? action.modelData : root.actionsEntry
+                            size: 20
+                        }
+
+                        StyledText {
+                            anchors.left: actionIcon.right
+                            anchors.leftMargin: 10
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: action.modelData.name
+                            color: action.index === root.actionIndex ? Theme.text1 : Theme.text2
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                        }
+
+                        MouseArea {
+                            id: actionArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.runAction(action.index)
+                        }
+                    }
+                }
+            }
+        }
+    ]
+
     component AppIcon: Image {
         property var entry
         property real size: 24
@@ -427,9 +601,15 @@ Overlay {
             id: tileArea
 
             anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.launch(tile.modelData.entry, tile.modelData.folder)
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton)
+                    root.showActions(tile.modelData.entry, tile);
+                else
+                    root.launch(tile.modelData.entry, tile.modelData.folder);
+            }
         }
     }
 
@@ -439,8 +619,25 @@ Overlay {
         required property var modelData
         required property int index
         readonly property bool selected: root.area === "list" && index === root.listIndex
-        readonly property bool app: modelData.kind === "app"
-        readonly property string generic: app ? modelData.entry.genericName : modelData.kind === "calc" ? "Enter copies it" : "Google"
+        readonly property string kind: modelData.kind
+        // The entry whose icon it shows: the app, or the window's app
+        readonly property var entry: kind === "app" ? modelData.entry : kind === "window" ? DesktopEntries.heuristicLookup(modelData.toplevel.wayland?.appId ?? "") : null
+        readonly property string label: {
+            if (kind === "app")
+                return root.marked(modelData.entry.name, modelData.at);
+            if (kind === "window")
+                return root.marked(modelData.toplevel.title, modelData.at);
+            if (kind === "calc")
+                return "= " + modelData.value;
+            return `Search the web for “${root.escaped(root.query.trim())}”`;
+        }
+        readonly property string generic: {
+            if (kind === "app")
+                return modelData.entry.genericName;
+            if (kind === "window")
+                return root.workspaceLabel(modelData.toplevel.workspace);
+            return kind === "calc" ? "Enter copies it" : "Google";
+        }
 
         width: list.width
         height: 40
@@ -458,14 +655,14 @@ Overlay {
             height: 24
 
             AppIcon {
-                visible: row.app
-                entry: row.app ? row.modelData.entry : null
+                visible: row.kind === "app" || row.kind === "window"
+                entry: row.entry
             }
 
             MaterialIcon {
-                visible: !row.app
+                visible: row.kind === "calc" || row.kind === "web"
                 anchors.centerIn: parent
-                text: row.modelData.kind === "calc" ? "calculate" : "travel_explore"
+                text: row.kind === "calc" ? "calculate" : "travel_explore"
                 color: Theme.accent
             }
         }
@@ -477,10 +674,7 @@ Overlay {
             anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.StyledText
-            text: {
-                const name = row.app ? root.marked(row.modelData.entry.name, row.modelData.at) : row.modelData.kind === "calc" ? "= " + row.modelData.value : `Search the web for “${root.escaped(root.query.trim())}”`;
-                return name + (row.generic === "" ? "" : `  <i><font color="${Theme.textDim}">${root.escaped(row.generic)}</font></i>`);
-            }
+            text: row.label + (row.generic === "" ? "" : `  <i><font color="${Theme.textDim}">${root.escaped(row.generic)}</font></i>`)
             color: row.selected ? Theme.text1 : Theme.text2
             elide: Text.ElideRight
         }
@@ -489,9 +683,15 @@ Overlay {
             id: rowArea
 
             anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.pick(row.modelData)
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton && row.kind === "app")
+                    root.showActions(row.modelData.entry, row);
+                else if (mouse.button === Qt.LeftButton)
+                    root.pick(row.modelData);
+            }
         }
     }
 }
