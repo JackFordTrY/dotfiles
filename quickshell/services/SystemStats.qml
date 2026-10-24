@@ -4,31 +4,50 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// CPU, memory and disk figures computed exactly as Waybar's cpu (10s), memory (30s) and
-// disk (30s, path "/") modules do, including their default tooltips.
+// CPU, memory and disk usage for the system popout. CPU and memory are sampled every 2s, keeping
+// the last two minutes for the history graphs; disk usage of / is read every 30s.
 Singleton {
     id: root
 
-    property int cpuUsage: 0
-    property string cpuTooltip: "(pending)"
-    property int memoryPercent: 0
-    property real memoryUsedGiB: 0
-    property int diskPercent: 0
-    property string diskTooltip: ""
+    readonly property int historyLength: 60
+    readonly property int interval: 2000
+
+    // Fractions 0-1
+    property real cpu: 0
+    property var cpuCores: []
+    property var cpuHistory: []
+    property real memory: 0
+    property var memoryHistory: []
+    property real disk: 0
+
+    // Bytes
+    property real memoryUsed: 0
+    property real memoryTotal: 0
+    property real diskUsed: 0
+    property real diskTotal: 0
+
+    property real uptime: 0
+    property string loadAverage: ""
 
     property var prevCpuTimes: []
 
-    // Waybar's pow_format(bytes, "B", binary): "{:.1f}" + Ki/Mi/Gi/... + "B"
     function formatBytes(bytes: real): string {
-        const units = ["", "k", "M", "G", "T", "P"];
-        let pow = 0;
-        while (pow + 1 < units.length && bytes / 1024 >= 1) {
-            bytes /= 1024;
-            pow++;
-        }
-        return bytes.toFixed(1) + units[pow] + (pow ? "i" : "") + "B";
+        const gib = bytes / Math.pow(1024, 3);
+        return gib >= 1024 ? (gib / 1024).toFixed(1) + " TiB" : gib.toFixed(gib >= 100 ? 0 : 1) + " GiB";
     }
 
+    function formatUptime(seconds: real): string {
+        const d = Math.floor(seconds / 86400);
+        const h = Math.floor(seconds % 86400 / 3600);
+        const m = Math.floor(seconds % 3600 / 60);
+        return d > 0 ? d + "d " + h + "h" : h > 0 ? h + "h " + m + "m" : m + "m";
+    }
+
+    function push(history: var, value: real): var {
+        return history.slice(1 - historyLength).concat([value]);
+    }
+
+    // Per line of /proc/stat: [idle + iowait, total]
     function parseCpuTimes(text: string): var {
         const times = [];
         for (const line of text.split("\n")) {
@@ -44,13 +63,12 @@ Singleton {
         const curr = parseCpuTimes(text);
         const prev = prevCpuTimes;
         prevCpuTimes = curr;
-        if (prev.length !== curr.length)
+        if (prev.length !== curr.length || prev.length === 0 || curr[0][1] === prev[0][1])
             return;
-        if (prev.length === 0 || curr[0][1] === prev[0][1])
-            return;
-        const usage = curr.map((c, i) => Math.trunc(100 * (1 - (c[0] - prev[i][0]) / (c[1] - prev[i][1]))));
-        cpuUsage = usage[0];
-        cpuTooltip = ["Total: " + usage[0] + "%"].concat(usage.slice(1).map((u, i) => "Core" + i + ": " + u + "%")).join("\n");
+        const usage = curr.map((c, i) => Math.max(0, 1 - (c[0] - prev[i][0]) / (c[1] - prev[i][1])));
+        cpu = usage[0];
+        cpuCores = usage.slice(1);
+        cpuHistory = push(cpuHistory, cpu);
     }
 
     function updateMemory(text: string) {
@@ -58,14 +76,14 @@ Singleton {
         for (const line of text.split("\n")) {
             const m = line.match(/^(\w+):\s+(\d+)/);
             if (m)
-                info[m[1]] = Number(m[2]);
+                info[m[1]] = Number(m[2]) * 1024;
         }
-        const used = info.MemTotal - (info.MemAvailable ?? info.MemFree);
-        memoryPercent = Math.trunc(100 * used / info.MemTotal);
-        memoryUsedGiB = used / 1024 / 1024;
+        memoryTotal = info.MemTotal;
+        memoryUsed = info.MemTotal - (info.MemAvailable ?? info.MemFree);
+        memory = memoryUsed / memoryTotal;
+        memoryHistory = push(memoryHistory, memory);
     }
 
-    // Loads on creation (Waybar's priming read), then on each reload()
     FileView {
         id: procStat
 
@@ -80,14 +98,31 @@ Singleton {
         onLoaded: root.updateMemory(text())
     }
 
-    // Waybar's first CPU figure comes 100ms after the priming read, then every 10s
+    FileView {
+        id: procUptime
+
+        path: "/proc/uptime"
+        onLoaded: root.uptime = parseFloat(text())
+    }
+
+    FileView {
+        id: procLoadavg
+
+        path: "/proc/loadavg"
+        onLoaded: root.loadAverage = text().split(" ").slice(0, 3).join(" ")
+    }
+
+    // The first CPU figure needs a second /proc/stat read shortly after the priming one
     Timer {
-        interval: 100
+        interval: 250
         running: true
         repeat: true
         onTriggered: {
-            interval = 10000;
+            interval = root.interval;
             procStat.reload();
+            procMeminfo.reload();
+            procUptime.reload();
+            procLoadavg.reload();
         }
     }
 
@@ -96,22 +131,20 @@ Singleton {
         running: true
         repeat: true
         triggeredOnStart: true
-        onTriggered: {
-            procMeminfo.reload();
-            disk.running = true;
-        }
+        onTriggered: diskStat.running = true
     }
 
     Process {
-        id: disk
+        id: diskStat
 
-        // f_blocks f_bfree f_bavail f_frsize
-        command: ["stat", "-f", "-c", "%b %f %a %S", "/"]
+        // f_blocks f_bfree f_frsize
+        command: ["stat", "-f", "-c", "%b %f %S", "/"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const [blocks, free, avail, size] = text.trim().split(" ").map(Number);
-                root.diskPercent = Math.trunc((blocks - free) * 100 / blocks);
-                root.diskTooltip = root.formatBytes((blocks - free) * size) + " used out of " + root.formatBytes(blocks * size) + " on / (" + root.diskPercent + "%)";
+                const [blocks, free, size] = text.trim().split(" ").map(Number);
+                root.diskTotal = blocks * size;
+                root.diskUsed = (blocks - free) * size;
+                root.disk = root.diskUsed / root.diskTotal;
             }
         }
     }

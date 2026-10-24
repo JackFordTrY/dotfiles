@@ -4,9 +4,8 @@ import QtQuick
 import Quickshell
 import qs.config
 
-// A tray item's DBus menu drawn like the GtkMenu Waybar pops up: light Adwaita (Waybar follows
-// the system colour scheme, which is "default") with Waybar's `*` rule applied, i.e. the
-// JetBrainsMono Nerd Font family, no border and no corner radius.
+// A tray item's DBus menu. Submenus open beside their entry and stay open while the pointer is
+// inside them, until a sibling entry is hovered.
 PopupWindow {
     id: root
 
@@ -25,9 +24,8 @@ PopupWindow {
 
     color: "transparent"
     grabFocus: true
-    // `menu { margin: 4px }` keeps the CSD shadow inside the popup surface
-    implicitWidth: column.implicitWidth + 8
-    implicitHeight: column.implicitHeight + 16
+    implicitWidth: column.implicitWidth + 12
+    implicitHeight: column.implicitHeight + 12
 
     QsMenuOpener {
         id: opener
@@ -35,34 +33,18 @@ PopupWindow {
         menu: root.menu
     }
 
-    // .csd.popup decoration: box-shadow 0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.13)
     Rectangle {
-        x: 3
-        y: 4
-        width: parent.width - 6
-        height: parent.height - 6
-        color: Qt.rgba(0, 0, 0, 0.08)
-    }
-
-    Rectangle {
-        x: 3
-        y: 3
-        width: parent.width - 6
-        height: parent.height - 6
-        color: Qt.rgba(0, 0, 0, 0.13)
-    }
-
-    Rectangle {
-        x: 4
-        y: 4
-        width: parent.width - 8
-        height: parent.height - 8
-        color: "#ffffff"
+        anchors.fill: parent
+        radius: 12
+        color: Theme.popupBackground
+        border.width: 1
+        border.color: Theme.purpleGlowStrong
 
         Column {
             id: column
 
-            y: 4
+            x: 6
+            y: 6
 
             Repeater {
                 model: opener.children
@@ -77,55 +59,79 @@ PopupWindow {
 
         required property QsMenuEntry modelData
         readonly property bool hovered: mouse.containsMouse && modelData.enabled
-        readonly property color textColor: !modelData.enabled ? "#929595" : hovered ? "#ffffff" : "#2e3436"
-
-        implicitWidth: modelData.isSeparator ? 0 : Math.max(40, 6 + (root.reserveToggle ? 23 : 0) + Math.ceil(label.implicitWidth) + (modelData.hasChildren ? 26 : 0) + 6)
-        implicitHeight: modelData.isSeparator ? 1 : 24
-
-        Rectangle {
-            width: column.width
-            height: parent.height
-            color: entry.modelData.isSeparator ? Qt.rgba(0, 0, 0, 0.1) : entry.hovered ? "#3584e4" : "transparent"
+        readonly property color textColor: !modelData.enabled ? Theme.textDim : hovered ? Theme.text1 : Theme.text2
+        readonly property string toggleIcon: {
+            if (modelData.buttonType === QsMenuButtonType.RadioButton)
+                return modelData.checkState === Qt.Checked ? "radio_button_checked" : "radio_button_unchecked";
+            if (modelData.buttonType === QsMenuButtonType.CheckBox)
+                return modelData.checkState === Qt.Checked ? "check_box" : "check_box_outline_blank";
+            return "";
         }
 
-        Image {
-            visible: entry.modelData.icon !== "" && entry.modelData.buttonType === QsMenuButtonType.None
+        implicitWidth: modelData.isSeparator ? 0 : Math.max(120, 10 + (root.reserveToggle ? 26 : 0) + Math.ceil(label.implicitWidth) + (modelData.hasChildren ? 26 : 0) + 12)
+        implicitHeight: modelData.isSeparator ? 9 : 30
+
+        Rectangle {
+            visible: entry.modelData.isSeparator
             x: 6
             y: 4
+            width: column.width - 12
+            height: 1
+            color: Theme.border
+        }
+
+        Rectangle {
+            visible: !entry.modelData.isSeparator
+            width: column.width
+            height: parent.height
+            radius: 8
+            color: entry.hovered ? Theme.hover : "transparent"
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 150
+                }
+            }
+        }
+
+        ThemedIcon {
+            visible: resolved !== "" && entry.toggleIcon === ""
+            x: 10
+            y: 7
             width: 16
             height: 16
             sourceSize: Qt.size(16, 16)
-            source: entry.modelData.icon
-        }
-
-        BarText {
-            visible: entry.modelData.buttonType !== QsMenuButtonType.None && entry.modelData.checkState !== Qt.Unchecked
-            x: 6
-            size: Theme.defaultFontSize
-            baselineY: 19
+            icon: entry.modelData.icon
             color: entry.textColor
-            text: entry.modelData.buttonType === QsMenuButtonType.RadioButton ? "" : ""
         }
 
-        BarText {
+        MaterialIcon {
+            visible: entry.toggleIcon !== ""
+            x: 9
+            anchors.verticalCenter: parent.verticalCenter
+            size: 18
+            text: entry.toggleIcon
+            fill: entry.modelData.checkState === Qt.Checked ? 1 : 0
+            color: entry.modelData.checkState === Qt.Checked ? Theme.accent : entry.textColor
+        }
+
+        StyledText {
             id: label
 
             visible: !entry.modelData.isSeparator
-            x: 6 + (root.reserveToggle ? 23 : 0)
-            size: Theme.defaultFontSize
-            // 16px content box at 4px padding, Pango line 15 + 5
-            baselineY: Theme.baseline(4, 16, Theme.defaultFontSize, true, false)
+            x: 10 + (root.reserveToggle ? 26 : 0)
+            anchors.verticalCenter: parent.verticalCenter
+            font.pixelSize: 13
             color: entry.textColor
             text: entry.modelData.text.replace(/_(.)/g, "$1")
         }
 
-        BarText {
+        MaterialIcon {
             visible: entry.modelData.hasChildren
-            x: column.width - 6 - 16
-            size: Theme.defaultFontSize
-            baselineY: label.baselineY
+            x: column.width - 8 - width
+            anchors.verticalCenter: parent.verticalCenter
+            text: "chevron_right"
             color: entry.textColor
-            text: ""
         }
 
         MouseArea {
@@ -146,7 +152,6 @@ PopupWindow {
         onHoveredChanged: if (hovered)
             root.openEntry = entry
 
-        // Submenu stays open while the pointer is inside it, until a sibling is hovered
         LazyLoader {
             active: entry.modelData.hasChildren && root.openEntry === entry
             source: Qt.resolvedUrl("TrayMenu.qml")
@@ -155,7 +160,8 @@ PopupWindow {
                     return;
                 item.menu = entry.modelData;
                 item.anchor.item = entry;
-                item.anchor.rect.x = column.width;
+                item.anchor.rect.x = column.width + 6;
+                item.anchor.rect.y = -6;
                 item.anchor.edges = Edges.Top | Edges.Right;
                 item.anchor.gravity = Edges.Bottom | Edges.Right;
                 item.anchor.adjustment = PopupAdjustment.All;

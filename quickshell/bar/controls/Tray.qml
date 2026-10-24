@@ -3,46 +3,28 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Services.SystemTray
-import Quickshell.Widgets
 import qs.config
 import qs.components
 
-// group/tray: hovering the chevron slides the tray out on its left. Passive items stay hidden
-// (Waybar's show-passive-items default); icons are 16px with 10px spacing.
-Drawer {
-    leftToRight: false
-    // #tray { margin-right: 10px } also matches the group box, which Waybar names "tray"
-    marginRight: 10
+// The system tray as a strip of icons in the controls panel; passive items stay hidden. While
+// one of the menus is open, `menuOpen` keeps the panel from closing under it.
+Row {
+    id: root
 
-    leader: Module {
-        marginRight: 12
+    property int openMenus: 0
+    readonly property bool menuOpen: openMenus > 0
+    readonly property int count: items.count
 
-        Label {
-            text: ""
-            size: 20
-            bold: true
-            baselineY: Theme.baseline(0, Theme.barHeight, 20, true, false)
+    spacing: 2
+
+    Repeater {
+        id: items
+
+        model: ScriptModel {
+            values: SystemTray.items.values.filter(item => item.status !== Status.Passive)
         }
-    }
 
-    Item {
-        implicitWidth: items.implicitWidth + 10
-        height: parent.height
-
-        Row {
-            id: items
-
-            height: parent.height
-            spacing: 10
-
-            Repeater {
-                model: ScriptModel {
-                    values: SystemTray.items.values.filter(item => item.status !== Status.Passive)
-                }
-
-                TrayItem {}
-            }
-        }
+        TrayItem {}
     }
 
     component TrayItem: Item {
@@ -52,24 +34,45 @@ Drawer {
         property point menuPos
         property bool menuOpen: false
 
-        implicitWidth: 16
-        height: parent.height
+        implicitWidth: 32
+        implicitHeight: 32
+        onMenuOpenChanged: root.openMenus += menuOpen ? 1 : -1
 
-        // #tray > .needs-attention
         Rectangle {
             anchors.fill: parent
+            radius: 8
+            color: itemHover.hovered || trayItem.menuOpen ? Theme.hover : "transparent"
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: Theme.duration
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+
+        ThemedIcon {
+            anchors.centerIn: parent
+            width: 18
+            height: 18
+            sourceSize: Qt.size(18, 18)
+            icon: trayItem.modelData.icon
+        }
+
+        Rectangle {
             visible: trayItem.modelData.status === Status.NeedsAttention
+            x: parent.width / 2 + 5
+            y: parent.height / 2 - 10
+            width: 6
+            height: 6
+            radius: 3
             color: Theme.red
         }
 
-        IconImage {
-            y: Math.floor((parent.height - 16) / 2)
-            implicitSize: 16
-            source: trayItem.modelData.icon
-        }
-
         HoverHandler {
-            id: hover
+            id: itemHover
+
+            cursorShape: Qt.PointingHandCursor
         }
 
         MouseArea {
@@ -109,8 +112,8 @@ Drawer {
 
             target: trayItem
             markup: true
-            hovered: hover.hovered && !trayItem.menuOpen
-            pointerX: hover.point.position.x
+            hovered: itemHover.hovered && !trayItem.menuOpen
+            pointerX: itemHover.point.position.x
             text: {
                 const item = trayItem.modelData;
                 if (item.tooltipTitle === "")
@@ -119,7 +122,7 @@ Drawer {
             }
         }
 
-        // gtk_menu_popup_at_pointer, flipped above the pointer on the bottom bar
+        // Opens above the pointer, flipping or sliding to stay on screen
         LazyLoader {
             active: trayItem.menuOpen
 

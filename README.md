@@ -2,7 +2,7 @@
 
 Personal Linux desktop configuration centered around **Hyprland** (Wayland) on Arch
 Linux. The active visual theme is the **Purple Night** palette, shared across Hyprland,
-the Quickshell bar, Rofi and Dunst.
+the Quickshell bar and its notifications, and Rofi.
 
 Hyprland config is split into:
 
@@ -24,9 +24,9 @@ Hyprland config is split into:
 ### Desktop shell
 
 - `quickshell` — status bar (bottom, autostarted)
-- `waybar` — previous status bar; config kept in `waybar/` as the reference (not autostarted)
+- `waybar` — previous status bar; config kept in `waybar/` (not autostarted)
 - `rofi` — app launcher / clipboard / power menu
-- `dunst` — notification daemon (themed + blurred, see below)
+- `libnotify` — `notify-send`; Quickshell is the notification daemon (see below)
 - `kitty` — terminal (`$terminal`)
 - `nwg-look` — GTK theme settings
 
@@ -38,7 +38,7 @@ Hyprland config is split into:
 - `brightnessctl` — backlight control
 - `pipewire` + `wireplumber` — audio (`wpctl` for volume keys)
 - `bluez` + `bluez-utils` — Bluetooth
-- `pavucontrol` — audio mixer (opened from the bar)
+- `pavucontrol` — full audio mixer (the bar's sound page covers everyday volume)
 - `hyprshutdown` — shutdown/exit helper (with `hyprctl dispatch exit` fallback)
 
 ### File management & archives
@@ -49,80 +49,158 @@ Hyprland config is split into:
 
 ## Fonts
 
-> **Required for icons to render.** The bar, Dunst, Rofi and the terminal use Nerd Font
-> glyphs (workspace icons, the special-workspaces drawer, audio/battery/network icons,
-> notification icons). These live in the patched Nerd Font — **not** the plain
-> `ttf-jetbrains-mono`. Without it, glyphs fall back to Noto Sans Mono and render blank.
+> **Required for icons to render.** The bar's icons come from Material Symbols Sharp
+> (by ligature name; without the font the names show up as plain words). Rofi and the
+> terminal use Nerd Font glyphs, which live in the patched Nerd Font — **not** the
+> plain `ttf-jetbrains-mono`. Without it, glyphs fall back to Noto Sans Mono and render blank.
 
 ```bash
-sudo pacman -S ttf-jetbrains-mono-nerd otf-font-awesome \
+sudo pacman -S ttf-jetbrains-mono-nerd ttf-material-symbols-variable otf-font-awesome \
                noto-fonts noto-fonts-emoji noto-fonts-cjk \
                ttf-nerd-fonts-symbols-mono
 ```
 
 | Package | Role |
 | --- | --- |
-| `ttf-jetbrains-mono-nerd` | **Primary** — text + all icon glyphs (`JetBrainsMono Nerd Font`) |
+| `ttf-jetbrains-mono-nerd` | **Primary** — text + Nerd Font icon glyphs (`JetBrainsMono Nerd Font`) |
+| `ttf-material-symbols-variable` | Bar icons (`Material Symbols Sharp`, variable fill/weight) |
+| `breeze-icons` | Tray and tray-menu icons (`breeze-dark`, set by `//@ pragma IconTheme` in `shell.qml`) |
 | `ttf-jetbrains-mono` | Plain JetBrains Mono (text only, no icons) |
 | `otf-font-awesome` | Font Awesome fallback |
 | `noto-fonts*` | Text / emoji / CJK coverage |
 | `ttf-nerd-fonts-symbols-mono` | Universal icon fallback for non-Nerd fonts |
 
-After installing: `fc-cache -f` then restart Quickshell/Dunst. Verify with
-`fc-match "JetBrainsMono Nerd Font"` (must report a JetBrainsMonoNerdFont file).
+After installing: `fc-cache -f` then restart Quickshell (a hot reload doesn't pick up new
+fonts). Verify with `fc-match "JetBrainsMono Nerd Font"` (must report a
+JetBrainsMonoNerdFont file) and `fc-match "Material Symbols Sharp"`.
 
 ## Bar
 
-Quickshell (`quickshell/`, autostarted with `exec-once = qs`) — a pixel-for-pixel port of the
-previous Waybar bar. Waybar's config stays as the reference: `waybar/config` (loaded over
-`config.jsonc`), modules in `waybar/themes/starter/modules.jsonc`, styling in
-`waybar/style.css` + `waybar/theme.css`. To switch back, swap the commented `exec-once` lines
-in `hypr/hyprland.conf` (or right now: `pkill -x qs; hyprctl dispatch exec waybar`).
+Quickshell (`quickshell/`, autostarted with `exec-once = qs`). Edits hot-reload on save;
+`qs log` shows the running bar's log. The previous Waybar config stays in `waybar/` (not
+autostarted); to switch back, swap the commented `exec-once` lines in `hypr/hyprland.conf`
+(or right now: `pkill -x qs; hyprctl dispatch exec waybar`).
 
-- Position: **bottom**, with 10px left/right margins.
-- **Left:** hardware drawer (system/disk/cpu/memory) · **special-workspaces drawer** · window title
+Tabs stand straight on the bottom screen edge (44px exclusive zone), with no band behind them.
+Every tab, button and panel has a flat bottom, rounded top corners and concave flares where it
+meets the screen edge, so it looks grown out of the edge, and a soft purple glow around it.
+Their fills are translucent and Hyprland blurs what's behind them with the same blur and noise
+as windows (the `quickshell` layer rules in `hypr/_rules.conf`; tray menus and tooltips too).
+The glow is cut away inside the shapes so it doesn't tint what shows through. Icons are
+Material Symbols Sharp at weight 300; active and hovered icons fill in and glow.
+When the shell focuses a window (following a song or a notification, placing Resources, moving
+VS Code windows) the cursor stays where it is: `services/Focus.qml` turns `cursor:no_warps` on
+for just those dispatches.
+
+Tabs along the bottom, with thin dividers between the groups inside a tab:
+
+- **Left:** system (robot) · RAM | what's playing (title only, hidden when nothing plays) | focused app name
 - **Center:** workspaces
-- **Right:** language · audio · bluetooth · battery · network · tray drawer · power menu · clock
+- **Right:** bell · language | Wi-Fi · bluetooth · volume | battery | power | clock (time over date)
 
-### Special-workspaces drawer
+Panels open after a 50ms hover dwell and grow in 240ms (`hoverDelay` / `openDuration` /
+`closeDuration` in `config/Theme.qml`).
 
-A collapsing layer-group icon () on the left. Click it to expand and reveal
-click-shortcuts to the special workspaces (mirrors the keybindings below):
+### System panel
 
-| Icon | Action |
+Hovering the robot or the RAM grows the left tab into a panel:
+
+- CPU, RAM and disk ring gauges with gradient arcs (hover for per-core usage / sizes)
+- a two-minute CPU + RAM usage graph
+- special-workspace toggles at the bottom (mirrors the keybindings below)
+
+| Button | Action |
 | --- | --- |
-|  | Toggle special workspace `kitty` (terminal scratchpad) |
-|  | Toggle special workspace `ytmusic` |
-|  | Toggle special workspace `trash` |
+| Kitty | Toggle special workspace `kitty` (terminal scratchpad) |
+| Music | Toggle special workspace `ytmusic` |
+| Trash | Toggle special workspace `trash` |
 
-> The legacy "Apps" launcher button and the settings cogwheel were removed.
+Clicking the robot or a gauge opens `htop`.
+
+### Controls panel
+
+Hovering (or clicking) the Wi-Fi, Bluetooth or volume icon grows the right tab into a panel. Three
+tiles sit on top: a tile's icon switches Wi-Fi / Bluetooth on and off or mutes the output, the
+rest of the tile picks the page below. Hovering an icon in the bar picks its page too.
+
+- **Sound** — output and mic sliders, an output picker when there is more than one device, and a
+  slider per app that is playing audio. Click a row's icon to mute it.
+- **Wi-Fi** — nearby networks (current first, then saved, then by signal), scanned while the
+  page is open. Click to connect or disconnect; a new secured network asks for its password in
+  the panel (the bar takes the keyboard only while that field is up). Enterprise networks fall
+  back to `nmtui`.
+- **Bluetooth** — paired devices with battery level, plus nearby ones while **Scan** is on.
+  Click to connect or disconnect; a new device is paired, trusted and connected.
+- **Tray** — along the bottom of every page. Tray menus keep the panel open while they're up.
+
+Every page gets the same room, so the panel keeps one size and pages cross-fade; long lists
+scroll inside it.
+
+### Media player
+
+The left tab shows the title of whatever MPRIS player is playing (else the one that played
+last), with a bouncing equalizer; it's hidden while nothing plays. Clicking it brings up the
+player: its own window where it can raise one, or for a browser (Chromium's MPRIS can't) its
+window, stepping through the tabs with Ctrl+PageDown until the title shows the track if the
+playing tab isn't the one showing; sleeping tabs it passes wake up. Hovering the title turns the
+left tab's panel to its media page (opening and closing in 125ms): a big cover beside the
+player, title, artist and album, a timeline to click or drag to seek (the track jumps on
+release), shuffle / previous / play / next / repeat where the player supports them, and the
+cover blurred behind it all. Players with their own volume (mpv, VLC, Spotify...) also get a
+slider for it; it moves the player's volume, not its stream in the mixer. Browsers advertise one
+that's fixed at 100%, so they don't get the slider. Pausing from the panel keeps the title until
+you leave it.
+
+### Workspaces
+
+| # | Icon | Use |
+| --- | --- | --- |
+| 1 | home | General |
+| 2 | globe | Browser |
+| 3 | code | Code |
+| 4 | terminal | Code 2 |
+| 5 | handyman | Utilities |
+
+1–5 are always shown; any other workspace shows its number. The active one widens into a lit
+pill, empty ones are dimmed and urgent ones turn red. Icons and names live in `kinds` in
+`bar/modules/Workspaces.qml`.
+
+### Modules
+
+- **RAM** — a memory stick that fills with the load and shifts cyan → purple → pink → red, and
+  the percentage. Click brings up GNOME Resources floating at 35% × 25%, centred on the current
+  workspace (an open Resources window is moved there).
+- **App name** — short names: the `names` map in `bar/modules/WindowTitle.qml`, else the
+  desktop entry's name. The tooltip shows the full window title.
+- **Language** — ENG / RU / UA (map in `services/KeyboardLayout.qml`); click cycles layouts.
+- **Volume** — right-click mutes, scroll changes volume by 1%.
+- **Bluetooth** — shown while the adapter is on.
+- **Power** — click shrinks the right panel to four icons: suspend, log out, reboot, shut down.
+  Suspend acts at once; the other three turn into a check mark that has to be clicked again
+  within 3 s. (No hibernate: logind reports it unavailable with zram-only swap. No lock: no
+  screen locker is installed.) **Clock** — the time over the date; click opens the calendar.
 
 ### Quickshell
 
-Same modules, geometry, colors, fonts, hover states, drawers, tooltips and click actions as
-the Waybar config. Edits hot-reload on save; `qs log` shows the running bar's log.
-
 ```
 quickshell/
-├── shell.qml          entry point, one Bar per screen
-├── config/Theme.qml   Purple Night palette + Waybar's measured geometry
-├── components/        GTK look-alikes: BarText/Label (Pango-style text), Module (CSS box),
-│                      Drawer (group drawer), Tooltip, TrayMenu (Adwaita GtkMenu)
-├── services/          data with Waybar's exact formulas: SystemStats, NetworkInfo (nl80211
-│                      scan signal), BatteryInfo (sysfs), KeyboardLayout, AudioPorts
-└── bar/               Bar.qml + one file per Waybar module in bar/modules/
+├── shell.qml          entry point, one Bar per screen and the notification banners
+├── config/Theme.qml   Purple Night palette, bar geometry, fonts, motion
+├── components/        EdgeShape (edge-grown outline), Tab / TabItem, Popout (tab that grows
+│                      into a panel), MaterialIcon, StyledText, StyledSlider, SectionLabel,
+│                      Divider, Chip, PageSlot, CircularGauge, HistoryGraph, Equalizer,
+│                      Tooltip, TrayMenu, ThemedIcon, NotificationContent
+├── services/          Notifs (notification daemon + history), Audio (Pipewire sinks + app
+│                      streams), Players (MPRIS), SystemStats, NetworkInfo (nl80211 scan
+│                      signal), BatteryInfo (sysfs), KeyboardLayout, AudioPorts
+├── notifications/     Popups.qml, the banners dropping from the top edge
+├── rules/             FolderWorkspaces.qml, VS Code windows to their folder's workspace
+└── bar/               Bar.qml; one file per module in bar/modules/ (System and Controls are
+                       the tabs with panels); the panels' pages in bar/controls/
 ```
 
-How it matches GTK:
-
-- `//@ pragma Env QT_SCALE_FACTOR_ROUNDING_POLICY=Ceil` makes Qt render at 2x and let
-  Hyprland downscale to 1.25x, the way GTK3 Waybar renders (it has no fractional scaling).
-- Text uses Pango's hinted metrics: whole-pixel advances (10px cells for JetBrains Mono at
-  16px), line boxes with ascent/descent rounded up, labels sized by advance (not ink).
-- Icons are the same font glyphs Waybar draws. Codepoints the Nerd Font lacks (`E473`,
-  `F5FD`, `F5E7`, `F796`, `F6A9`, `F590`) use Font Awesome 7 Free Solid, like Pango's fallback.
-- Remaining difference: Qt doesn't hint glyphs at 2x, so text strokes can differ by up to
-  one native pixel; tooltips/menus use 15px text because Qt can't render GTK's 14.67px.
+`//@ pragma Env QT_SCALE_FACTOR_ROUNDING_POLICY=Ceil` in `shell.qml` makes Qt render at 2x and
+lets Hyprland downscale to 1.25x, which keeps the 1px borders and flares crisp.
 
 Language server (VSCode, `theqtcompany.qt-qml` extension):
 
@@ -136,25 +214,31 @@ Language server (VSCode, `theqtcompany.qt-qml` extension):
   Quickshell exposes an interface type to tooling and picks the Wayland/X11 implementation
   at runtime.
 
-## Notifications (Dunst)
+## Notifications
 
-Config: `dunst/dunstrc`. Themed to the Purple Night palette — purple `#6c63ff` frames,
-`#141225`/`#0d0b14` backgrounds at ~90% alpha, rounded corners, red frame for critical.
+Quickshell is the notification daemon (`quickshell/services/Notifs.qml`); Dunst is stopped and
+masked (`systemctl --user unmask dunst` to bring it back).
 
-Backgrounds are semi-transparent so the Hyprland **blur** shows through, matching the
-general theme. The blur is enabled by a layer rule in `hypr/_rules.conf`:
+- **Banners** hang from the top edge in the top-right corner. A new one drips out of the edge:
+  a narrow drop pushes down with a springy overshoot, then widens into the card. At most three
+  at a time (the newest pushes out the oldest), each at most twice the height of a one-line
+  notification, the body trimmed with an ellipsis. Hovering holds them; click to follow the
+  notification (the app's own action, e.g. open the chat, else focus or start the app);
+  right-click or the cross hides the banner at once.
+- **History**: hover the bell (next to the language) for the notifications page of the controls
+  panel. Entries stay until cleared there (the cross on an entry, or *Clear*), survive restarts
+  (`~/.local/state/quickshell/.../notifications.json`) and can be clicked to follow later.
+- **Silence**: click the bell. It turns red and crossed out, banners stop, and notifications
+  still collect in the history. A dot on the bell means something unread.
+- Keybindings can use `qs ipc call notifications toggleSilence` and `qs ipc call notifications
+  clear`. The gaming-mode messages go through `notify-send`, so they look the same.
 
-```ini
-layerrule {
-    name = blur-notifications
-    match:namespace = ^(notifications)$
-    blur = true
-    ignore_alpha = 0.6
-}
-```
+## VS Code workspaces
 
-> Hyprland 0.53+ requires the **block** layer-rule syntax above; the legacy
-> `layerrule = blur, notifications` one-liner no longer parses.
+Every VS Code window opens on workspace 3 (the `code-window` rule). Windows on `~/work_lgfg` then
+move to workspace 4 and `~/work` stays on 3, once VS Code's title names the folder: Hyprland
+rules only see a new window's first title, so `quickshell/rules/FolderWorkspaces.qml` does this
+(each window once, so moving one by hand sticks). Add folders to its `folders` map.
 
 ## Hyprland variables
 
@@ -238,7 +322,7 @@ The active theme is the **Purple Night** palette.
 
 ### Special workspaces
 
-Also reachable from the bar's special-workspaces drawer (see above).
+Also reachable from the bottom of the bar's system panel (see above).
 
 | Shortcut | Action |
 | --- | --- |

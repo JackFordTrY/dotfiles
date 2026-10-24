@@ -1,10 +1,12 @@
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import qs.config
 import qs.bar.modules
 
-// window#waybar: bottom of every screen, 10px side margins, exclusive zone. The three module
-// boxes are laid out like a GtkBox with a center widget: centred unless a side pushes it.
+// Three tabs standing on the bottom screen edge, with nothing behind them. The window is taller than
+// the 44px it reserves so the side tabs can grow into panels; the input mask covers only the
+// band and the panels, so clicks above them reach the windows behind.
 PanelWindow {
     id: bar
 
@@ -16,65 +18,63 @@ PanelWindow {
         right: true
         bottom: true
     }
-    margins {
-        left: Theme.barMargin
-        right: Theme.barMargin
-    }
-    implicitHeight: Theme.barHeight
+    exclusiveZone: Theme.barHeight
+    // Room for the taller panel and the glow above it
+    implicitHeight: Math.max(system.maxHeight, controls.maxHeight) + 24
     color: "transparent"
+    // Only while a Wi-Fi password is being typed
+    WlrLayershell.keyboardFocus: controls.wantsKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.barBackground
+    // Region's `item` doesn't follow an item that grows or moves, so the panels' geometry is
+    // bound by hand, in window coordinates
+    mask: Region {
+        y: band.y
+        width: band.width
+        height: band.height
+
+        Region {
+            x: system.x + system.panel.x
+            y: band.y + system.panel.y
+            width: system.panel.width
+            height: system.panel.height
+        }
+
+        Region {
+            x: controls.x + controls.panel.x
+            y: band.y + controls.panel.y
+            width: controls.panel.width
+            height: controls.panel.height
+        }
     }
 
-    // border-bottom: drawn over the background, not part of the layout
-    Rectangle {
-        y: parent.height - 1
+    Item {
+        id: band
+
+        anchors.bottom: parent.bottom
         width: parent.width
-        height: 1
-        color: Theme.moduleBorder
-    }
+        height: Theme.barHeight
 
-    Row {
-        id: leftModules
+        System {
+            id: system
 
-        height: parent.height
-
-        Hardware {
-            id: hardware
-        }
-
-        SpecialWorkspaces {
-            id: special
-        }
-
-        WindowTitle {
+            x: Theme.edgePadding + Theme.flare
             screen: bar.screen
-            // Long titles ellipsize instead of pushing the workspaces off centre
-            maxTextWidth: Math.floor((bar.width - center.width) / 2) - hardware.width - special.width - 37
+            // The panels grow over the workspaces
+            z: 1
         }
-    }
 
-    Workspaces {
-        id: center
+        // Centred unless a side pushes it
+        Workspaces {
+            id: center
 
-        x: Math.max(leftModules.width, Math.min(Math.floor((bar.width - width) / 2), bar.width - rightModules.width - width))
-    }
+            x: Math.max(system.x + system.width + Theme.tabGap, Math.min(Math.floor((band.width - width) / 2), controls.x - Theme.tabGap - width))
+        }
 
-    Row {
-        id: rightModules
+        Controls {
+            id: controls
 
-        x: bar.width - width
-        height: parent.height
-
-        Language {}
-        Audio {}
-        Bluetooth {}
-        Battery {}
-        Network {}
-        Tray {}
-        Power {}
-        Clock {}
+            x: band.width - width - Theme.edgePadding - Theme.flare
+            z: 1
+        }
     }
 }

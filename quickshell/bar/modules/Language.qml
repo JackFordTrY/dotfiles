@@ -1,14 +1,14 @@
 import QtQuick
-import qs.config
+import Quickshell
 import qs.components
 import qs.services
 
-// hyprland/language: the active layout's full name, unboxed.
-Module {
-    marginRight: 10
-
-    Label {
-        text: KeyboardLayout.layout
-        baselineY: Theme.labelBaseline
+// The active keyboard layout as ENG / RU / UA; left click switches to the next one.
+TabItem {
+    text: KeyboardLayout.short
+    tooltip: KeyboardLayout.layout
+    onClicked: button => {
+        if (button === Qt.LeftButton)
+            Quickshell.execDetached(["hyprctl", "switchxkblayout", "all", "next"]);
     }
 }

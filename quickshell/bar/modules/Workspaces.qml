@@ -6,11 +6,34 @@ import Quickshell.Hyprland
 import qs.config
 import qs.components
 
-// hyprland/workspaces: persistent 1-5 plus any other regular workspace from all outputs, in
-// Waybar's default order. Buttons are GTK flat buttons (Adwaita min-width 16px, .active 40px)
-// whose width and background follow `transition: all 0.3s ease-in-out`.
-Item {
+// Workspaces 1-5 are always shown with an icon for what each is used for; any other regular
+// workspace shows its number. The active one widens into a lit pill with a filled, glowing icon;
+// empty ones are dimmed.
+Tab {
     id: root
+
+    readonly property var kinds: ({
+            1: {
+                icon: "home",
+                name: "General"
+            },
+            2: {
+                icon: "public",
+                name: "Browser"
+            },
+            3: {
+                icon: "code",
+                name: "Code"
+            },
+            4: {
+                icon: "terminal",
+                name: "Code 2"
+            },
+            5: {
+                icon: "handyman",
+                name: "Utilities"
+            }
+        })
 
     readonly property var workspaces: {
         const list = Hyprland.workspaces.values.filter(w => !w.name.startsWith("special")).map(w => ({
@@ -34,93 +57,92 @@ Item {
         });
     }
 
-    // #workspaces: margin 0 1px, transparent 1px border, padding 0 1px
-    implicitWidth: row.implicitWidth + 6
-    implicitHeight: Theme.barHeight
+    padding: 5
+    spacing: 2
 
-    Row {
-        id: row
-
-        x: 3
-        height: parent.height
-
-        Repeater {
-            model: ScriptModel {
-                values: root.workspaces
-                objectProp: "id"
-            }
-
-            WorkspaceButton {}
+    Repeater {
+        model: ScriptModel {
+            values: root.workspaces
+            objectProp: "id"
         }
+
+        WorkspaceButton {}
     }
 
     component WorkspaceButton: Item {
         id: button
 
         required property var modelData
+        readonly property var kind: root.kinds[modelData.id] ?? null
+        readonly property HyprlandWorkspace workspace: Hyprland.workspaces.values.find(w => w.id === modelData.id) ?? null
         readonly property bool active: Hyprland.focusedWorkspace?.id === modelData.id
-        property real minWidth: active ? 40 : 16
-        readonly property int buttonWidth: Math.round(Math.max(minWidth, Math.ceil(label.implicitWidth))) + 10
+        readonly property bool occupied: (workspace?.toplevels.values.length ?? 0) > 0
+        readonly property bool urgent: workspace?.urgent ?? false
+        readonly property bool hovered: mouse.containsMouse
+        readonly property color color: active ? Theme.accent : urgent ? Theme.red : hovered || occupied ? Theme.text2 : Theme.textDim
 
-        // button: margin 4px 3px, padding 0 5px, 25px tall inside the box's 5px/6px margins
-        implicitWidth: buttonWidth + 6
-        implicitHeight: Theme.barHeight
+        implicitWidth: active ? 56 : 40
+        height: parent.height
 
-        Behavior on minWidth {
+        Behavior on implicitWidth {
             NumberAnimation {
-                duration: Theme.transitionDuration
-                easing.type: Easing.Bezier
-                easing.bezierCurve: Theme.easeInOut
+                duration: Theme.duration
+                easing.type: Easing.OutCubic
             }
         }
 
         Rectangle {
-            x: 3
-            y: 10
-            width: button.buttonWidth
-            height: 25
-            radius: 15
-            color: mouse.containsMouse ? Theme.moduleHover : button.active ? Theme.surface5 : "transparent"
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
+            height: 28
+            radius: 8
+            color: button.active ? Theme.active : button.hovered ? Theme.hover : "transparent"
+            border.width: button.active ? 1 : 0
+            border.color: Theme.purpleGlowStrong
 
             Behavior on color {
                 ColorAnimation {
-                    duration: Theme.transitionDuration
-                    easing.type: Easing.Bezier
-                    easing.bezierCurve: Theme.easeInOut
+                    duration: Theme.duration
+                    easing.type: Easing.OutCubic
                 }
-            }
-
-            // box-shadow: inset 0 0 0 1px @purpleGlowStrong
-            Rectangle {
-                visible: button.active
-                anchors.fill: parent
-                radius: parent.radius
-                color: "transparent"
-                border.width: 1
-                border.color: Theme.purpleGlowStrong
             }
         }
 
-        BarText {
-            id: label
+        MaterialIcon {
+            visible: button.kind !== null
+            anchors.centerIn: parent
+            text: button.kind?.icon ?? ""
+            fill: button.active || button.hovered ? 1 : 0
+            glow: button.active ? 0.9 : 0
+            color: button.color
+        }
 
-            x: 8 + Math.floor((button.buttonWidth - 10 - Math.ceil(implicitWidth)) / 2)
-            bold: true
-            baselineY: Theme.baseline(10, 25, 16, true, false)
-            // format "{}" is the first argument, the workspace id
-            text: String(button.modelData.id)
+        StyledText {
+            visible: button.kind === null
+            anchors.centerIn: parent
+            text: button.modelData.id > 0 ? String(button.modelData.id) : button.modelData.name
+            font.bold: true
+            color: button.color
         }
 
         MouseArea {
             id: mouse
 
-            x: 3
-            y: 10
-            width: button.buttonWidth
-            height: 25
+            anchors.fill: parent
             hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-            onPressed: Hyprland.dispatch(button.modelData.id > 0 ? "workspace " + button.modelData.id : "workspace name:" + button.modelData.name)
+            cursorShape: Qt.PointingHandCursor
+            onPressed: {
+                tooltip.dismiss();
+                Hyprland.dispatch(button.modelData.id > 0 ? "workspace " + button.modelData.id : "workspace name:" + button.modelData.name);
+            }
+        }
+
+        Tooltip {
+            id: tooltip
+
+            target: button
+            text: button.kind?.name ?? "Workspace " + button.modelData.name
+            hovered: mouse.containsMouse
         }
     }
 }

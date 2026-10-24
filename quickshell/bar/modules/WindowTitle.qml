@@ -1,54 +1,61 @@
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
-import qs.config
 import qs.components
 
-// hyprland/window with separate-outputs: the last window title of this monitor's active
-// workspace, through the module's "rewrite" rules. On an empty workspace the pill keeps its
-// border but drops its background (window#waybar.empty #window).
-Module {
+// The app last focused on this monitor's active workspace, by a short name ("Code", "Opera");
+// the full window title is in the tooltip. Hidden on an empty workspace.
+TabItem {
     id: root
 
     required property ShellScreen screen
-    property real maxTextWidth: Infinity
 
-    readonly property var workspace: Hyprland.monitorFor(screen)?.activeWorkspace?.lastIpcObject ?? {}
-    readonly property string title: rewrite(workspace.lastwindowtitle ?? "")
+    readonly property HyprlandWorkspace workspace: Hyprland.monitorFor(screen)?.activeWorkspace ?? null
+    readonly property HyprlandToplevel toplevel: {
+        const active = Hyprland.activeToplevel;
+        if (active && active.workspace === workspace)
+            return active;
+        const address = workspace?.lastIpcObject?.lastwindow ?? "";
+        return workspace?.toplevels.values.find(t => "0x" + t.address === address) ?? null;
+    }
+    readonly property string appId: toplevel?.wayland?.appId || toplevel?.lastIpcObject?.class || ""
+    readonly property string name: shortName(appId)
 
-    // Rules in JsonCpp's sorted key order; each rule that fully matches the title is applied
-    readonly property var rules: [["(.*) - Brave", "$1"], ["(.*) - Brave Search", "$1"], ["(.*) - Chromium", "$1"], ["(.*) - Outlook", "$1"], ["(.*) Microsoft Teams", "$1"]]
+    // Names that the desktop entry spells out too long, keyed by lowercase app id
+    readonly property var names: ({
+            "com.microsoft.vscode": "Code",
+            "code-oss": "Code",
+            "org.telegram.desktop": "Telegram",
+            "org.gnome.nautilus": "Files",
+            "org.pulseaudio.pavucontrol": "Volume",
+            "pavucontrol": "Volume",
+            "blueman-manager": "Bluetooth",
+            "google-chrome": "Chrome",
+            "brave-browser": "Brave"
+        })
 
-    function rewrite(title: string): string {
-        let result = title;
-        for (const [pattern, replacement] of rules) {
-            if (new RegExp("^(?:" + pattern + ")$", "i").test(title))
-                result = result.replace(new RegExp(pattern, "gi"), replacement);
-        }
-        return result;
+    function shortName(appId: string): string {
+        if (appId === "")
+            return "";
+        const known = names[appId.toLowerCase()];
+        if (known)
+            return known;
+        const entry = DesktopEntries.heuristicLookup(appId);
+        const name = (entry?.name || appId.split(".").pop()).replace(/[-_]/g, " ").split(" ").slice(0, 2).join(" ");
+        return name.charAt(0).toUpperCase() + name.slice(1, 20);
     }
 
-    pill: true
-    radius: 12
-    marginRight: 15
-    padLeft: 10
-    padRight: 10
-    background: (workspace.windows ?? 0) === 0 ? "transparent" : Theme.moduleBg
-    tooltip: title
+    text: name
+    padding: 8
+    tooltip: toplevel?.title ?? ""
+    visible: name !== ""
 
-    BarText {
-        width: Math.min(textAdvance, root.maxTextWidth)
-        elide: textAdvance > root.maxTextWidth ? Text.ElideRight : Text.ElideNone
-        color: Theme.text2
-        text: root.title
-    }
-
-    // Waybar re-reads the workspace on these events
+    // Keeps the workspace's lastwindow current for monitors that don't have focus
     Connections {
         target: Hyprland
 
         function onRawEvent(event: HyprlandEvent) {
-            if (["activewindow", "closewindow", "movewindow", "changefloatingmode", "fullscreen"].includes(event.name))
+            if (["activewindow", "closewindow", "movewindow"].includes(event.name))
                 Hyprland.refreshWorkspaces();
         }
     }
