@@ -24,6 +24,9 @@ ShellRoot {
     // Banners from the top edge of the focused monitor
     Popups {}
 
+    // The level after a volume or brightness key, from the middle of the top edge
+    Osd {}
+
     // SUPER + R: pinned apps, search and the app list
     Launcher {}
 
@@ -32,4 +35,7 @@ ShellRoot {
 
     // VS Code windows to the workspace of their folder
     FolderWorkspaces {}
+
+    // Low battery notifications at 15% and 5%
+    BatteryWarnings {}
 }

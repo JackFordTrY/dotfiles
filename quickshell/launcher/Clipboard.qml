@@ -9,7 +9,8 @@ import qs.config
 import qs.components
 
 // The clipboard history (clipvault; SUPER + V runs `qs ipc call clipboard toggle`). The selected
-// image grows into a full preview, easing in and back out as the selection moves. Enter or a click
+// image grows into a full preview, and selected text into its first lines, easing in and back out
+// as the selection moves. Enter or a click
 // puts the entry back on the clipboard, byte for byte, and pastes it into the window that had
 // focus: Ctrl+V, or Ctrl+Shift+V in a terminal. Shift+Delete removes it.
 Overlay {
@@ -28,6 +29,8 @@ Overlay {
     property var entries: []
     // Image files on disk, by name
     property var cached: ({})
+    // Text entries in full (their first 4000 bytes), by id, fetched as they're selected
+    property var fullTexts: ({})
     property int index: 0
     // Where Enter pastes: the window focused when it opened, { address, terminal }
     property var target: null
@@ -99,6 +102,8 @@ Overlay {
         index = 0;
         list.positionViewAtBeginning();
     }
+    onIndexChanged: fetchDelay.restart()
+    onResultsChanged: fetchDelay.restart()
     onKeyPressed: event => {
         switch (event.key) {
         case Qt.Key_Up:
@@ -152,6 +157,38 @@ Overlay {
         }
     }
 
+    // Fetches the selected text once the selection rests, so holding an arrow doesn't start a
+    // process per row
+    Timer {
+        id: fetchDelay
+
+        interval: 80
+        onTriggered: {
+            const entry = root.results[root.index];
+            if (!entry || entry.image || root.fullTexts[entry.id] !== undefined || fetcher.running)
+                return;
+            fetcher.entryId = entry.id;
+            fetcher.running = true;
+        }
+    }
+
+    Process {
+        id: fetcher
+
+        property string entryId
+
+        command: ["sh", "-c", 'clipvault get "$1" | head -c 4000', "sh", entryId]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const texts = Object.assign({}, root.fullTexts);
+                texts[fetcher.entryId] = text;
+                root.fullTexts = texts;
+            }
+        }
+        // The selection may have moved on meanwhile
+        onExited: fetchDelay.restart()
+    }
+
     // Writes out the images not on disk yet ("319.png")
     Process {
         id: cacher
@@ -194,20 +231,26 @@ Overlay {
         required property int index
         readonly property var image: modelData.image
         readonly property bool selected: index === root.index
+        // Shown from its first line with something on it; pasted as it is
+        readonly property string full: image ? "" : (root.fullTexts[modelData.id] ?? "").replace(/^(?:[ \t]*\n)+/, "")
+        // Text with more than its row's one line to show
+        readonly property bool longText: full !== "" && measure.lineCount > 1
         readonly property string file: image && root.cached[image.file] ? "file://" + root.thumbs + "/" + image.file : ""
         // The preview: the image fitted to the row's width and previewHeight, never enlarged
         readonly property real fit: image ? Math.min(1, (width - 20) / image.width, root.previewHeight / image.height) : 0
         readonly property real bigWidth: image ? image.width * fit : 0
         readonly property real bigHeight: image ? image.height * fit : 0
         // 0 a row, 1 the full preview
-        property real grown: selected && image ? 1 : 0
+        property real grown: selected && (image || longText) ? 1 : 0
 
         function mix(from: real, to: real): real {
             return from + (to - from) * grown;
         }
 
         width: list.width
-        height: mix(40, 50 + bigHeight)
+        height: image ? mix(40, 50 + bigHeight) : mix(40, 20 + measure.height)
+        // Text past the growing row's edge stays hidden
+        clip: true
         // Keeps the growing preview in view
         onHeightChanged: {
             if (selected)
@@ -232,8 +275,8 @@ Overlay {
         // The thumbnail, growing into the preview under the caption. It drops below the caption's
         // line in the first quarter, so the two don't overlap while it grows
         Item {
-            x: entry.mix(10, (entry.width - entry.bigWidth) / 2)
-            y: 6 + 34 * Math.min(1, entry.grown * 4)
+            x: entry.image ? entry.mix(10, (entry.width - entry.bigWidth) / 2) : 10
+            y: entry.image ? 6 + 34 * Math.min(1, entry.grown * 4) : 6
             width: entry.image ? entry.mix(40, entry.bigWidth) : 40
             height: entry.image ? entry.mix(28, entry.bigHeight) : 28
 
@@ -281,13 +324,28 @@ Overlay {
             }
         }
 
+        // The caption, or the text itself: one line in a row, its first lines when grown
         StyledText {
             x: entry.image ? entry.mix(62, 12) : 62
-            y: (40 - height) / 2
+            y: entry.image ? (40 - height) / 2 : 10
             width: entry.width - x - 12
             textFormat: entry.image ? Text.StyledText : Text.PlainText
-            text: entry.image ? `Image  <font color="${Theme.textDim}">${entry.image.width} × ${entry.image.height} · ${entry.image.size}</font>` : entry.modelData.text
+            text: entry.image ? `Image  <font color="${Theme.textDim}">${entry.image.width} × ${entry.image.height} · ${entry.image.size}</font>` : entry.grown > 0 && entry.full !== "" ? entry.full : entry.modelData.text
+            wrapMode: entry.grown > 0 && !entry.image ? Text.WrapAtWordBoundaryOrAnywhere : Text.NoWrap
+            maximumLineCount: entry.grown > 0 && !entry.image ? measure.maximumLineCount : 1
             color: entry.selected ? Theme.text1 : Theme.text2
+            elide: Text.ElideRight
+        }
+
+        // The grown text's size, worked out ahead so the row knows how far to grow
+        StyledText {
+            id: measure
+
+            visible: false
+            width: entry.width - 74
+            text: entry.full
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+            maximumLineCount: 8
             elide: Text.ElideRight
         }
 

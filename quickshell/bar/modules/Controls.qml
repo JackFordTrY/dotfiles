@@ -9,8 +9,8 @@ import qs.bar.controls
 // The right tab: the notification bell, language, the Wi-Fi / Bluetooth / volume icons, battery,
 // power and clock. Hovering or clicking one of those three icons grows the tab into a panel with
 // a tile for each (the tile's icon switches it on and off, the rest of the tile picks its page),
-// that page, and the system tray along the bottom; hovering the bell shows the notification
-// history there. Clicking power shrinks it to just the power options.
+// a brightness slider, that page, and the system tray along the bottom; hovering the bell shows
+// the notification history there. Clicking power shrinks it to just the power options.
 Popout {
     id: root
 
@@ -40,6 +40,11 @@ Popout {
     onHoveredPageChanged: {
         if (hoveredPage !== "" && !wantsKeyboard)
             page = hoveredPage;
+    }
+    // The backlight may have moved without the keys (another app, a dimmer)
+    onOpenChanged: {
+        if (open)
+            Brightness.refresh();
     }
 
     Behavior on expandedHeight {
@@ -120,6 +125,62 @@ Popout {
                         selected: root.page === "sound"
                         onToggled: Audio.toggleMute(Audio.sink)
                         onPicked: root.page = "sound"
+                    }
+                }
+
+                // The backlight, under the tiles on every page; laid out like the sound page's rows
+                Item {
+                    visible: Brightness.available
+                    width: parent.width
+                    height: 30
+
+                    Item {
+                        id: brightnessIcon
+
+                        width: 30
+                        height: 30
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: Brightness.value < 0.34 ? "brightness_low" : Brightness.value < 0.67 ? "brightness_medium" : "brightness_high"
+                            color: Theme.text2
+                        }
+                    }
+
+                    StyledText {
+                        id: brightnessLabel
+
+                        anchors.left: brightnessIcon.right
+                        anchors.leftMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 104
+                        text: "Brightness"
+                        color: Theme.text2
+                        font.pixelSize: 13
+                    }
+
+                    StyledSlider {
+                        anchors.left: brightnessLabel.right
+                        anchors.leftMargin: 8
+                        anchors.right: brightnessPercent.left
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        value: Brightness.value
+                        from: Theme.pink
+                        to: Theme.yellow
+                        onMoved: value => Brightness.set(value)
+                    }
+
+                    StyledText {
+                        id: brightnessPercent
+
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 38
+                        horizontalAlignment: Text.AlignRight
+                        text: Math.round(Brightness.value * 100) + "%"
+                        color: Theme.text2
+                        font.pixelSize: 12
                     }
                 }
 

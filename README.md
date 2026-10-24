@@ -82,7 +82,8 @@ Every tab, button and panel has a flat bottom, rounded top corners and concave f
 meets the screen edge, so it looks grown out of the edge, and a soft purple glow around it.
 Their fills are translucent and Hyprland blurs what's behind them with the same blur and noise
 as windows (the `quickshell` layer rules in `hypr/_rules.conf`; tray menus and tooltips too).
-The glow is cut away inside the shapes so it doesn't tint what shows through. Icons are
+The glow is cut away inside the shapes so it doesn't tint what shows through. Text and icons
+carry a faint shadow a pixel below them, so they stay readable over bright windows. Icons are
 Material Symbols Sharp at weight 300; active and hovered icons fill in and glow.
 When the shell focuses a window (following a song or a notification, placing Resources, moving
 VS Code windows) the cursor stays where it is: `services/Focus.qml` turns `cursor:no_warps` on
@@ -103,13 +104,9 @@ Hovering the robot or the RAM grows the left tab into a panel:
 
 - CPU, RAM and disk ring gauges with gradient arcs (hover for per-core usage / sizes)
 - a two-minute CPU + RAM usage graph
-- special-workspace toggles at the bottom (mirrors the keybindings below)
-
-| Button | Action |
-| --- | --- |
-| Kitty | Toggle special workspace `kitty` (terminal scratchpad) |
-| Music | Toggle special workspace `ytmusic` |
-| Trash | Toggle special workspace `trash` |
+- a chip per special workspace that's open (Hyprland drops one once its last window goes), lit
+  while it's showing and with its window count past one; click to toggle it. `kitty` (the
+  terminal scratchpad) and `trash` get their own icons
 
 Clicking the robot or a gauge opens `htop`.
 
@@ -117,7 +114,9 @@ Clicking the robot or a gauge opens `htop`.
 
 Hovering (or clicking) the Wi-Fi, Bluetooth or volume icon grows the right tab into a panel. Three
 tiles sit on top: a tile's icon switches Wi-Fi / Bluetooth on and off or mutes the output, the
-rest of the tile picks the page below. Hovering an icon in the bar picks its page too.
+rest of the tile picks the page below. Hovering an icon in the bar picks its page too. Under the
+tiles, on every page, a brightness slider for the screen (`brightnessctl`; it stops at 1% so the
+screen never goes black).
 
 - **Sound** — output and mic sliders, an output picker when there is more than one device, and a
   slider per app that is playing audio. Click a row's icon to mute it.
@@ -144,8 +143,8 @@ player, title, artist and album, a timeline to click or drag to seek (the track 
 release), shuffle / previous / play / next / repeat where the player supports them, and the
 cover blurred behind it all. Players with their own volume (mpv, VLC, Spotify...) also get a
 slider for it; it moves the player's volume, not its stream in the mixer. Browsers advertise one
-that's fixed at 100%, so they don't get the slider. Pausing from the panel keeps the title until
-you leave it.
+that's fixed at 100%, so they don't get the slider. A paused title stays in the bar, dimmed, for
+three minutes (so it can be resumed from the media page), and while the panel is open on it.
 
 ### Workspaces
 
@@ -229,6 +228,11 @@ masked (`systemctl --user unmask dunst` to bring it back).
   still collect in the history. A dot on the bell means something unread.
 - Keybindings can use `qs ipc call notifications toggleSilence` and `qs ipc call notifications
   clear`. The gaming-mode messages go through `notify-send`, so they look the same.
+- **Battery**: a notification at 15% and an urgent one at 5% (it stays until dismissed), each
+  once per discharge, with the time left (`quickshell/rules/BatteryWarnings.qml`).
+- **Volume and brightness**: the keys show the level hanging from the middle of the top edge,
+  shaped like the banners, for a moment after the last press (`quickshell/notifications/Osd.qml`;
+  the bindings call `qs ipc call osd volume`, `mic` or `brightness` after changing it).
 
 ## Launcher
 
@@ -244,6 +248,8 @@ first (the counts rofi left in `~/.cache/rofi3.druncache`, plus its own in
 - **List:** Up and Down move through it (Up from the top goes back to the pinned row), typing
   searches names (start, word starts, anywhere, then letters in order, matches in bold), then
   descriptions and keywords.
+- **Calculator:** arithmetic (`2*21`, `(3 + 4)^2 / 7`) shows its result on top; Enter copies it.
+- **Web search:** when no app matches, the only row searches Google for the query.
 - **Enter** launches the selection, as does a click. **Escape**, SUPER + R again or a click
   outside the panel closes it.
 
@@ -255,6 +261,8 @@ clipboard toggle`): what `clipvault` stored, newest first, with a search field.
 - **Images** show as thumbnails; the selected one grows into a full preview (fitted to the
   panel, at most 300px tall), and shrinks back as the selection moves on, both easing smoothly.
   They're written out to `~/.cache/clipvault/thumbs/` to be shown.
+- **Text** shows one line; the selected entry grows the same way into its first eight lines (in
+  full, fetched from `clipvault` once the selection rests).
 - **Enter** or a click puts the entry back on the clipboard byte for byte (line breaks,
   indentation and order intact; images as their own type) and pastes it into the window that
   was focused: Hyprland sends it Ctrl+V, or Ctrl+Shift+V in a terminal. **Shift+Delete**
@@ -357,7 +365,6 @@ Also reachable from the bottom of the bar's system panel (see above).
 | --- | --- |
 | `CONTROL + Q` | Toggle special workspace `kitty` |
 | `SUPER + SHIFT + T` | Toggle special workspace `trash` |
-| `CONTROL + SHIFT + Y` | Toggle special workspace `ytmusic` |
 | `SUPER + T` | Move active window to special workspace `trash` |
 
 ### Focus and window movement

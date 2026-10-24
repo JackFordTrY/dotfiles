@@ -9,6 +9,8 @@ Text {
     renderType: Text.NativeRendering
     font.family: Theme.font
     font.pixelSize: Theme.fontSize
+    style: Text.Raised
+    styleColor: Theme.textShadow
 
     Behavior on color {
         enabled: animateColor

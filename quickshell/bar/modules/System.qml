@@ -223,37 +223,40 @@ Popout {
                     }
                 }
 
-                // The special workspaces, lit while showing
+                // The special workspaces that are open (Hyprland drops one once its last window
+                // goes), lit while showing, with their window count past one
                 Row {
                     spacing: 6
 
                     Repeater {
-                        model: [
-                            {
-                                name: "kitty",
-                                icon: "terminal",
-                                label: "Kitty"
-                            },
-                            {
-                                name: "ytmusic",
-                                icon: "music_note",
-                                label: "Music"
-                            },
-                            {
-                                name: "trash",
-                                icon: "delete",
-                                label: "Trash"
-                            }
-                        ]
+                        id: specials
+
+                        model: ScriptModel {
+                            values: Hyprland.workspaces.values.filter(w => w.name.startsWith("special:")).sort((a, b) => a.name.localeCompare(b.name))
+                        }
 
                         Chip {
-                            required property var modelData
+                            required property HyprlandWorkspace modelData
+                            readonly property string name: modelData.name.slice("special:".length)
+                            readonly property int windows: modelData.toplevels.values.length
 
-                            icon: modelData.icon
-                            text: modelData.label
-                            active: root.activeSpecial === modelData.name
-                            onClicked: Hyprland.dispatch("togglespecialworkspace " + modelData.name)
+                            icon: ({
+                                    kitty: "terminal",
+                                    trash: "delete"
+                                })[name] ?? "layers"
+                            text: name.charAt(0).toUpperCase() + name.slice(1) + (windows > 1 ? " · " + windows : "")
+                            active: root.activeSpecial === name
+                            onClicked: Hyprland.dispatch("togglespecialworkspace " + name)
                         }
+                    }
+
+                    StyledText {
+                        visible: specials.count === 0
+                        height: 28
+                        verticalAlignment: Text.AlignVCenter
+                        text: "No special workspaces open"
+                        color: Theme.textDim
+                        font.pixelSize: 12
                     }
                 }
             }

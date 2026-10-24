@@ -10,7 +10,9 @@ import qs.components
 // The app launcher (SUPER + R runs `qs ipc call launcher toggle`): a row of pinned apps and every
 // app, most launched first, under the search field. Left and Right cycle round the pinned apps
 // (the row scrolls when they don't fit), Up and Down go through the list, typing searches it and
-// Enter launches the selection. Escape, SUPER + R again or a click outside the panel closes it.
+// Enter launches the selection. Arithmetic ("2*21") shows its result on top, which Enter copies;
+// when no app matches, Enter searches the web. Escape, SUPER + R again or a click outside the
+// panel closes it.
 Overlay {
     id: root
 
@@ -39,7 +41,7 @@ Overlay {
     // Pinned tiles across the panel; more scroll
     readonly property int pinnedShown: 5
     // List rows shown at once
-    readonly property int rows: 8
+    readonly property int shownRows: 8
 
     // Where the arrows and Enter act: "pinned" or "list"
     property string area: "pinned"
@@ -72,6 +74,7 @@ Overlay {
             } : matchOf(entry, q);
             if (match)
                 found.push({
+                    kind: "app",
                     entry: entry,
                     tier: match.tier,
                     at: match.at,
@@ -80,6 +83,36 @@ Overlay {
         }
         found.sort((a, b) => b.tier - a.tier || b.uses - a.uses || a.entry.name.localeCompare(b.entry.name));
         return found;
+    }
+
+    // What the list shows: the result first when the query is arithmetic, then the apps, then a
+    // web search when no app matches
+    readonly property var rows: {
+        const q = query.trim();
+        const answer = calculate(q);
+        return [...(answer === null ? [] : [
+                    {
+                        kind: "calc",
+                        value: answer
+                    }
+                ]), ...results, ...(q !== "" && results.length === 0 ? [
+                    {
+                        kind: "web"
+                    }
+                ] : [])];
+    }
+
+    // The value of `q` when it's arithmetic ("2*21", "(3 + 4)^2 / 7"), as text, else null. Only
+    // digits, operators and brackets get as far as being evaluated
+    function calculate(q: string): var {
+        if (!/^[\d\s.+\-*\/%^()]+$/.test(q) || !/\d/.test(q) || !/[+\-*\/%^]/.test(q.replace(/^\s*-/, "")))
+            return null;
+        try {
+            const value = Function(`"use strict"; return (${q.replace(/\^/g, "**")});`)();
+            return typeof value === "number" && isFinite(value) ? String(Number(value.toPrecision(12))) : null;
+        } catch (e) {
+            return null;
+        }
     }
 
     function usesOf(id: string): int {
@@ -163,7 +196,7 @@ Overlay {
     // Down from the pinned row enters the list; Up from the top of the list goes back to it
     function stepList(step: int) {
         if (area === "pinned") {
-            if (step > 0 && results.length > 0)
+            if (step > 0 && rows.length > 0)
                 area = "list";
             return;
         }
@@ -172,7 +205,7 @@ Overlay {
                 area = "pinned";
             return;
         }
-        listIndex = Math.max(0, Math.min(results.length - 1, listIndex + step));
+        listIndex = Math.max(0, Math.min(rows.length - 1, listIndex + step));
         list.positionViewAtIndex(listIndex, ListView.Contain);
     }
 
@@ -181,11 +214,21 @@ Overlay {
             const pin = pinnedApps[pinnedIndex];
             if (pin)
                 launch(pin.entry, pin.folder);
-        } else {
-            const result = results[listIndex];
-            if (result)
-                launch(result.entry, "");
+        } else if (rows[listIndex]) {
+            pick(rows[listIndex]);
         }
+    }
+
+    function pick(row: var) {
+        if (row.kind === "app") {
+            launch(row.entry, "");
+            return;
+        }
+        close();
+        if (row.kind === "calc")
+            Quickshell.execDetached(["wl-copy", row.value]);
+        else
+            Quickshell.execDetached(["xdg-open", "https://www.google.com/search?q=" + encodeURIComponent(query.trim())]);
     }
 
     function launch(entry: var, folder: string) {
@@ -230,10 +273,10 @@ Overlay {
             stepList(1);
             break;
         case Qt.Key_PageUp:
-            stepList(-rows);
+            stepList(-shownRows);
             break;
         case Qt.Key_PageDown:
-            stepList(rows);
+            stepList(shownRows);
             break;
         case Qt.Key_Return:
         case Qt.Key_Enter:
@@ -308,11 +351,11 @@ Overlay {
         id: list
 
         width: parent.width
-        height: root.rows * 40 + (root.rows - 1) * spacing
+        height: root.shownRows * 40 + (root.shownRows - 1) * spacing
         spacing: 4
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        model: root.results
+        model: root.rows
         currentIndex: root.listIndex
         delegate: AppRow {}
 
@@ -396,7 +439,8 @@ Overlay {
         required property var modelData
         required property int index
         readonly property bool selected: root.area === "list" && index === root.listIndex
-        readonly property string generic: modelData.entry.genericName
+        readonly property bool app: modelData.kind === "app"
+        readonly property string generic: app ? modelData.entry.genericName : modelData.kind === "calc" ? "Enter copies it" : "Google"
 
         width: list.width
         height: 40
@@ -405,12 +449,25 @@ Overlay {
         border.width: 1
         border.color: selected ? Theme.purpleGlowStrong : "transparent"
 
-        AppIcon {
+        Item {
             id: rowIcon
 
             x: 10
             anchors.verticalCenter: parent.verticalCenter
-            entry: row.modelData.entry
+            width: 24
+            height: 24
+
+            AppIcon {
+                visible: row.app
+                entry: row.app ? row.modelData.entry : null
+            }
+
+            MaterialIcon {
+                visible: !row.app
+                anchors.centerIn: parent
+                text: row.modelData.kind === "calc" ? "calculate" : "travel_explore"
+                color: Theme.accent
+            }
         }
 
         StyledText {
@@ -420,7 +477,10 @@ Overlay {
             anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.StyledText
-            text: root.marked(row.modelData.entry.name, row.modelData.at) + (row.generic === "" ? "" : `  <i><font color="${Theme.textDim}">${root.escaped(row.generic)}</font></i>`)
+            text: {
+                const name = row.app ? root.marked(row.modelData.entry.name, row.modelData.at) : row.modelData.kind === "calc" ? "= " + row.modelData.value : `Search the web for “${root.escaped(root.query.trim())}”`;
+                return name + (row.generic === "" ? "" : `  <i><font color="${Theme.textDim}">${root.escaped(row.generic)}</font></i>`);
+            }
             color: row.selected ? Theme.text1 : Theme.text2
             elide: Text.ElideRight
         }
@@ -431,7 +491,7 @@ Overlay {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.launch(row.modelData.entry, "")
+            onClicked: root.pick(row.modelData)
         }
     }
 }

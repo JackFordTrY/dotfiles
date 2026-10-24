@@ -25,6 +25,10 @@ Singleton {
     readonly property color blue: "#4da6ff"
     readonly property color green: "#4dffb5"
     readonly property color red: "#ff5555"
+    readonly property color yellow: "#f1fa8c"
+    // A pixel under all text and icons, so they stay readable over bright windows behind the
+    // see-through panels
+    readonly property color textShadow: Qt.rgba(0, 0, 0, 0.45)
     readonly property color purpleGlow: Qt.rgba(108 / 255, 99 / 255, 1, 0.18)
     readonly property color purpleGlowStrong: Qt.rgba(108 / 255, 99 / 255, 1, 0.32)
 
