@@ -1,8 +1,8 @@
 # Config Overview
 
 Personal Linux desktop configuration centered around **Hyprland** (Wayland) on Arch
-Linux. The active visual theme is the **Purple Night** palette, shared across Hyprland,
-the Quickshell bar and its notifications, and Rofi.
+Linux. The active visual theme is the **Purple Night** palette, shared across Hyprland
+and the Quickshell bar with its notifications, app launcher and clipboard picker.
 
 Hyprland config is split into:
 
@@ -24,15 +24,13 @@ Hyprland config is split into:
 ### Desktop shell
 
 - `quickshell` — status bar (bottom, autostarted)
-- `waybar` — previous status bar; config kept in `waybar/` (not autostarted)
-- `rofi` — app launcher / clipboard / power menu
 - `libnotify` — `notify-send`; Quickshell is the notification daemon (see below)
 - `kitty` — terminal (`$terminal`)
 - `nwg-look` — GTK theme settings
 
 ### Utilities
 
-- `wl-clipboard` + `clipvault` — clipboard history (autostarted)
+- `wl-clipboard` + `clipvault` — clipboard history (autostarted), picked from with SUPER + V
 - `flameshot` — screenshots (`grim` + `slurp` also available)
 - `playerctl` — media key control
 - `brightnessctl` — backlight control
@@ -50,9 +48,9 @@ Hyprland config is split into:
 ## Fonts
 
 > **Required for icons to render.** The bar's icons come from Material Symbols Sharp
-> (by ligature name; without the font the names show up as plain words). Rofi and the
-> terminal use Nerd Font glyphs, which live in the patched Nerd Font — **not** the
-> plain `ttf-jetbrains-mono`. Without it, glyphs fall back to Noto Sans Mono and render blank.
+> (by ligature name; without the font the names show up as plain words). The terminal uses
+> Nerd Font glyphs, which live in the patched Nerd Font — **not** the plain
+> `ttf-jetbrains-mono`. Without it, glyphs fall back to Noto Sans Mono and render blank.
 
 ```bash
 sudo pacman -S ttf-jetbrains-mono-nerd ttf-material-symbols-variable otf-font-awesome \
@@ -77,9 +75,7 @@ JetBrainsMonoNerdFont file) and `fc-match "Material Symbols Sharp"`.
 ## Bar
 
 Quickshell (`quickshell/`, autostarted with `exec-once = qs`). Edits hot-reload on save;
-`qs log` shows the running bar's log. The previous Waybar config stays in `waybar/` (not
-autostarted); to switch back, swap the commented `exec-once` lines in `hypr/hyprland.conf`
-(or right now: `pkill -x qs; hyprctl dispatch exec waybar`).
+`qs log` shows the running bar's log.
 
 Tabs stand straight on the bottom screen edge (44px exclusive zone), with no band behind them.
 Every tab, button and panel has a flat bottom, rounded top corners and concave flares where it
@@ -189,11 +185,12 @@ quickshell/
 ├── components/        EdgeShape (edge-grown outline), Tab / TabItem, Popout (tab that grows
 │                      into a panel), MaterialIcon, StyledText, StyledSlider, SectionLabel,
 │                      Divider, Chip, PageSlot, CircularGauge, HistoryGraph, Equalizer,
-│                      Tooltip, TrayMenu, ThemedIcon, NotificationContent
+│                      Tooltip, TrayMenu, ThemedIcon, NotificationContent, FloatingPanel
 ├── services/          Notifs (notification daemon + history), Audio (Pipewire sinks + app
 │                      streams), Players (MPRIS), SystemStats, NetworkInfo (nl80211 scan
 │                      signal), BatteryInfo (sysfs), KeyboardLayout, AudioPorts
 ├── notifications/     Popups.qml, the banners dropping from the top edge
+├── launcher/          Launcher.qml (SUPER + R) and Clipboard.qml (SUPER + V), on Overlay.qml
 ├── rules/             FolderWorkspaces.qml, VS Code windows to their folder's workspace
 └── bar/               Bar.qml; one file per module in bar/modules/ (System and Controls are
                        the tabs with panels); the panels' pages in bar/controls/
@@ -233,6 +230,38 @@ masked (`systemctl --user unmask dunst` to bring it back).
 - Keybindings can use `qs ipc call notifications toggleSilence` and `qs ipc call notifications
   clear`. The gaming-mode messages go through `notify-send`, so they look the same.
 
+## Launcher
+
+SUPER + R opens the shell's app launcher (`quickshell/launcher/Launcher.qml`, through
+`qs ipc call launcher toggle`): a search field, a row of pinned apps and every app, most launched
+first (the counts rofi left in `~/.cache/rofi3.druncache`, plus its own in
+`~/.local/state/quickshell/.../launcher.json`).
+
+- **Pinned:** Opera, Telegram, Discord, and VS Code on `~/work` and on `~/work_lgfg`. Left and
+  Right cycle round them, wrapping at the ends; with more than five the row scrolls. Edit the
+  `pinned` list at the top of `Launcher.qml` (a desktop entry id, plus `folder` and `label` for
+  a VS Code folder).
+- **List:** Up and Down move through it (Up from the top goes back to the pinned row), typing
+  searches names (start, word starts, anywhere, then letters in order, matches in bold), then
+  descriptions and keywords.
+- **Enter** launches the selection, as does a click. **Escape**, SUPER + R again or a click
+  outside the panel closes it.
+
+## Clipboard
+
+SUPER + V opens the clipboard history (`quickshell/launcher/Clipboard.qml`, through `qs ipc call
+clipboard toggle`): what `clipvault` stored, newest first, with a search field.
+
+- **Images** show as thumbnails; the selected one grows into a full preview (fitted to the
+  panel, at most 300px tall), and shrinks back as the selection moves on, both easing smoothly.
+  They're written out to `~/.cache/clipvault/thumbs/` to be shown.
+- **Enter** or a click puts the entry back on the clipboard byte for byte (line breaks,
+  indentation and order intact; images as their own type) and pastes it into the window that
+  was focused: Hyprland sends it Ctrl+V, or Ctrl+Shift+V in a terminal. **Shift+Delete**
+  removes an entry. Escape, SUPER + V again or a click outside closes it.
+- Rich text (a browser's bold or links) isn't kept: `wl-paste --watch clipvault store` saves
+  one format per copy, the plain text.
+
 ## VS Code workspaces
 
 Every VS Code window opens on workspace 3 (the `code-window` rule). Windows on `~/work_lgfg` then
@@ -246,7 +275,7 @@ rules only see a new window's first title, so `quickshell/rules/FolderWorkspaces
 
 - `$terminal` = `kitty`
 - `$fileManager` = `dolphin`
-- `$menu` = `rofi -show drun -show-icons -matching fuzzy`
+- `$menu` = `qs ipc call launcher toggle` (the shell's launcher)
 - `$mainMod` = `SUPER` (the "Windows" key)
 
 ## Color palette
@@ -314,9 +343,9 @@ The active theme is the **Purple Night** palette.
 | --- | --- |
 | `F4` | Launch terminal (`kitty`) |
 | `SUPER + E` | Launch file manager (`dolphin`) |
-| `SUPER + R` | Launch app menu (`rofi`) |
+| `SUPER + R` | Open or close the app launcher (the shell's) |
 | `Print` | Flameshot GUI (`QT_SCALE_FACTOR="0.8"`) |
-| `SUPER + V` | Clipboard history menu (Rofi + `rofi_script.sh`) |
+| `SUPER + V` | Clipboard history: pick to paste (the shell's) |
 | `SUPER + M` | Exit (`hyprshutdown`, fallback `hyprctl dispatch exit`) |
 | `SUPER + SHIFT + CONTROL + M` | Same shutdown/exit action |
 

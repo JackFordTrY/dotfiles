@@ -3,11 +3,11 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// Purple Night palette (waybar/theme.css) and the bar's geometry. Everything the shell draws
-// grows out of the bottom screen edge: a flat bottom, rounded top corners and concave flares
-// where the shape meets the edge.
+// Purple Night palette (as in hypr/_variables.conf) and the bar's geometry. Everything the shell
+// draws grows out of the bottom screen edge: a flat bottom, rounded top corners and concave
+// flares where the shape meets the edge.
 Singleton {
-    // theme.css
+    // Purple Night
     readonly property color surface0: "#0d0b14"
     readonly property color surface1: "#100f1a"
     readonly property color surface2: "#141225"

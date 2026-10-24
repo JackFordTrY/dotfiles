@@ -10,6 +10,7 @@
 // searches hicolor, so tray icons and menus take Breeze Dark (light icons for the dark bar).
 import Quickshell
 import qs.bar
+import qs.launcher
 import qs.notifications
 import qs.rules
 
@@ -22,6 +23,12 @@ ShellRoot {
 
     // Banners from the top edge of the focused monitor
     Popups {}
+
+    // SUPER + R: pinned apps, search and the app list
+    Launcher {}
+
+    // SUPER + V: the clipboard history, pasting what's picked
+    Clipboard {}
 
     // VS Code windows to the workspace of their folder
     FolderWorkspaces {}

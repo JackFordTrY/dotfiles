@@ -1,8 +1,0 @@
-
-@theme "/usr/share/rofi/themes/purple.rasi"
-
-configuration {
-  sorting-method: "fzf";
-  sort: true;
-  disable-history: false;
-}
