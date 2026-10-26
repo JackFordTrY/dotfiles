@@ -7,7 +7,7 @@ import qs.components
 import qs.services
 
 // Today's weather over a month at a glance: today in the accent, the neighbouring months' days
-// dimmed, weeks starting on the locale's first day. The arrows or the wheel page through the
+// dimmed, weeks starting on Monday. The arrows or the wheel page through the
 // months; it's back on this month (and the weather fetched again if it's old) whenever the panel
 // opens on it.
 Item {
@@ -18,7 +18,8 @@ Item {
     readonly property date today: clock.date
     property int month: today.getMonth()
     property int year: today.getFullYear()
-    readonly property int firstDay: Qt.locale().firstDayOfWeek
+    // Monday (Sunday is 0), whatever the locale (en_US starts on Sunday)
+    readonly property int firstDay: 1
     readonly property bool thisMonth: month === today.getMonth() && year === today.getFullYear()
     // Six weeks from the one holding the 1st
     readonly property var days: {

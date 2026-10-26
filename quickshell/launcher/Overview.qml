@@ -11,9 +11,10 @@ import qs.services
 
 // SUPER + Tab (`qs ipc call overview toggle`): every workspace over the wallpaper, with live
 // previews of its windows where they sit on the screen. Click a window to switch to it, an empty
-// spot to go to that workspace, or drag a window onto another workspace to move it there. The
-// arrows (or Tab) step through the windows and Enter switches to the selected one; typing dims
-// the windows whose title or app doesn't hold it and selects the first that does.
+// spot to go to that workspace, or drag a window onto another workspace to move it there; the
+// cross on a hovered window (or a middle click) closes it. The arrows (or Tab) step through the
+// windows, Enter switches to the selected one and Delete closes it; typing dims the windows
+// whose title or app doesn't hold it and selects the first that does.
 Overlay {
     id: root
 
@@ -70,6 +71,10 @@ Overlay {
         Hyprland.dispatch("workspace " + id);
     }
 
+    function closeWindow(toplevel: var) {
+        Hyprland.dispatch("closewindow address:0x" + toplevel.address);
+    }
+
     function moveTo(toplevel: var, id: int) {
         if (toplevel.workspace?.id !== id)
             Hyprland.dispatch("movetoworkspacesilent " + id + ",address:0x" + toplevel.address);
@@ -95,6 +100,11 @@ Overlay {
         if (!matching.includes(selected))
             selected = matching[0] ?? null;
     }
+    // The selected window closed
+    onMatchingChanged: {
+        if (selected && !matching.includes(selected))
+            selected = matching[0] ?? null;
+    }
     onKeyPressed: event => {
         switch (event.key) {
         case Qt.Key_Left:
@@ -111,6 +121,10 @@ Overlay {
         case Qt.Key_Enter:
             if (selected)
                 focusWindow(selected);
+            break;
+        case Qt.Key_Delete:
+            if (selected)
+                closeWindow(selected);
             break;
         default:
             return;
@@ -288,7 +302,7 @@ Overlay {
         property real factor
         readonly property var ipc: modelData.lastIpcObject
         readonly property bool selected: root.selected === modelData
-        readonly property bool lit: selected || area.containsMouse
+        readonly property bool lit: selected || hover.hovered
 
         x: ((ipc.at?.[0] ?? 0) - root.screenArea.x) * factor
         y: ((ipc.at?.[1] ?? 0) - root.screenArea.y) * factor
@@ -343,7 +357,7 @@ Overlay {
 
             StyledText {
                 x: 6
-                width: parent.width - 12
+                width: parent.width - 12 - (closeButton.visible ? closeButton.width + 4 : 0)
                 anchors.verticalCenter: parent.verticalCenter
                 text: thumb.modelData.title
                 font.pixelSize: 11
@@ -351,13 +365,51 @@ Overlay {
             }
         }
 
-        MouseArea {
-            id: area
+        // Doesn't take the hover from the button over it
+        HoverHandler {
+            id: hover
 
-            anchors.fill: parent
-            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.focusWindow(thumb.modelData)
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            onClicked: mouse => {
+                if (mouse.button === Qt.MiddleButton)
+                    root.closeWindow(thumb.modelData);
+                else
+                    root.focusWindow(thumb.modelData);
+            }
+        }
+
+        Rectangle {
+            id: closeButton
+
+            visible: hover.hovered && thumb.width > 60
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 3
+            width: 18
+            height: 18
+            radius: 5
+            color: Qt.alpha(Theme.red, closeArea.containsMouse ? 0.85 : 0.55)
+
+            MaterialIcon {
+                anchors.centerIn: parent
+                text: "close"
+                size: 14
+                color: Theme.text1
+            }
+
+            MouseArea {
+                id: closeArea
+
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.closeWindow(thumb.modelData)
+            }
         }
 
         // Takes over from the click once the pointer has moved

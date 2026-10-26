@@ -15,12 +15,14 @@ Item {
     property int bodyLines: 3
     // Off while a close button sits over it
     property bool showTime: true
+    // How many came in a burst, the banner showing the newest
+    property int count: 1
     // Caps the whole block; the body is trimmed with an ellipsis to fit
     property real maxHeight: Infinity
     // A one-line summary over a one-line body, what a typical notification takes
     readonly property real oneLineHeight: app.implicitHeight + summaryLine.height + bodyLine.height + texts.spacing * 2
     readonly property var n: entry.notification
-    readonly property string appName: n ? n.appName : entry.appName ?? ""
+    readonly property string appName: Notifs.appNameOf(entry)
     readonly property string summary: n ? n.summary : entry.summary ?? ""
     readonly property string body: n ? n.body : entry.body ?? ""
     readonly property string image: n ? n.image : entry.image ?? ""
@@ -28,14 +30,16 @@ Item {
     readonly property bool critical: (n ? n.urgency : entry.urgency) === NotificationUrgency.Critical
     // Some apps put a themed icon name in the image too; those go through the icon theme
     readonly property bool imageIsIcon: image.startsWith("image://icon/")
-    // The first icon that exists: a themed image, the app's icon (a name, path or URL), or the
-    // icon of the app's desktop entry
+    // The first icon that exists: a themed image, the app's icon (a name, path or URL), Claude's
+    // logo for Claude Code's (which come without one), or the icon of the app's desktop entry
     readonly property string iconSource: {
         const candidates = [];
         if (imageIsIcon)
             candidates.push(image);
         if (appIcon !== "")
             candidates.push(appIcon.startsWith("/") ? "file://" + appIcon : appIcon.includes("://") ? appIcon : "image://icon/" + appIcon);
+        if (Notifs.claudeProject(entry) !== null)
+            candidates.push("file://" + Quickshell.shellPath("assets/claude.svg"));
         // Reads the entry list, so this re-runs once the desktop entries have loaded
         const desktopEntry = Notifs.desktopEntryFor(entry);
         if (desktopEntry?.icon)
@@ -99,7 +103,7 @@ Item {
                 id: app
 
                 width: parent.width - ago.implicitWidth - 8
-                text: root.appName.toUpperCase()
+                text: (root.appName + (root.count > 1 ? " · " + root.count + " new" : "")).toUpperCase()
                 color: root.critical ? Theme.red : Theme.textMuted
                 elide: Text.ElideRight
             }

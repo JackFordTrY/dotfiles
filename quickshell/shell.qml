@@ -28,7 +28,9 @@ ShellRoot {
     Osd {}
 
     // SUPER + R: pinned apps, search and the app list
-    Launcher {}
+    Launcher {
+        folderWorkspaces: folderWorkspaces
+    }
 
     // SUPER + V: the clipboard history, pasting what's picked
     Clipboard {}
@@ -37,7 +39,12 @@ ShellRoot {
     Overview {}
 
     // VS Code windows to the workspace of their folder
-    FolderWorkspaces {}
+    FolderWorkspaces {
+        id: folderWorkspaces
+    }
+
+    // Telegram and Discord as tabs of one group
+    MessengerGroup {}
 
     // Low battery notifications at 15% and 5%
     BatteryWarnings {}

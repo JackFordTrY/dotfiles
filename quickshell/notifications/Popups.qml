@@ -13,7 +13,9 @@ import qs.services
 // overshoot, then widens into the card, and the text fades in once it's nearly there. More
 // notifications grow the drop the same way; when the last goes it narrows and pulls back up into
 // the edge. At most three at a time, the newest pushing out the oldest, each at most twice the
-// height of a one-line notification. Hovering holds the banners; a click follows the
+// height of a one-line notification. A burst from one conversation shares a banner, showing the
+// newest with a count. A line under each runs out with the time it has left.
+// Hovering holds the banners; a click follows the
 // notification, a right click or the cross hides the banner at once. Everything stays in the
 // history.
 PanelWindow {
@@ -145,7 +147,7 @@ PanelWindow {
         readonly property var actions: (modelData.notification?.actions ?? []).filter(a => a.identifier !== "default")
 
         width: root.cardWidth
-        implicitHeight: content.implicitHeight + (actionRow.visible ? actionRow.height + 10 : 0) + (index > 0 ? 11 : 0)
+        implicitHeight: content.implicitHeight + (actionRow.visible ? actionRow.height + 10 : 0) + (index > 0 ? 11 : 0) + (countdown.visible ? 8 : 0)
 
         // Between banners
         Rectangle {
@@ -167,6 +169,7 @@ PanelWindow {
             y: card.index > 0 ? 11 : 0
             width: parent.width
             entry: card.modelData
+            count: card.modelData.burst ?? 1
             showTime: !cardHover.hovered
             // No banner taller than twice a one-line notification; the body is trimmed to fit
             maxHeight: oneLineHeight * 2
@@ -236,9 +239,46 @@ PanelWindow {
         }
 
         Timer {
+            id: timeout
+
             interval: Notifs.popupTimeout(card.modelData)
             running: interval > 0 && !hover.hovered
             onTriggered: Notifs.hidePopup(card.modelData)
+        }
+
+        // The time left, as a line under the text that runs out with it. Hovering fills it back
+        // up, as the time starts over once the pointer leaves
+        Rectangle {
+            id: countdown
+
+            property real remaining: 1
+
+            visible: timeout.interval > 0
+            x: 48
+            y: card.height - height
+            width: (card.width - x) * remaining
+            height: 2
+            radius: 1
+            color: Theme.accent
+            opacity: 0.7
+
+            NumberAnimation {
+                target: countdown
+                property: "remaining"
+                running: timeout.running
+                from: 1
+                to: 0
+                duration: timeout.interval
+            }
+
+            NumberAnimation {
+                target: countdown
+                property: "remaining"
+                running: hover.hovered
+                to: 1
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
         }
     }
 }

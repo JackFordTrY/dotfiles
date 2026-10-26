@@ -7,20 +7,23 @@ import Quickshell.Io
 import Quickshell.Services.Notifications
 
 // The notification daemon. Every notification goes into `history` (newest first, saved across
-// restarts, kept until cleared from the panel) and, unless `silenced`, into `popups` for the
-// banners that drop from the top edge. Entries are plain objects copying a notification's text
+// restarts, kept for `historyLifetime` or until cleared from the panel) and, unless `silenced`,
+// into `popups` for the banners that drop from the top edge. Entries are plain objects copying a notification's text
 // so they outlive it; `notification` stays set while the app's notification is alive, for its
 // actions. Bindings that should follow a replaced notification read through `notification`
 // rather than the copies.
 //
 // A silence can have an end (`silenceUntil`, from the bell's menu), when banners come back on
-// their own. `qs ipc call notifications toggleSilence` and `... clear` are there for keybindings.
+// their own. Banners also pause while the screen is shared, so private messages don't show up on
+// a call. `qs ipc call notifications toggleSilence` and `... clear` are there for keybindings.
 Singleton {
     id: root
 
     property bool silenced: false
     // When the silence ends by itself (ms since the epoch), or 0 for when it's turned back on
     property real silencedUntil: 0
+    // No banners: silenced, or the screen is being shared
+    readonly property bool paused: silenced || Privacy.screenShared
     // Set by new arrivals, cleared once the history has been looked at
     property bool unread: false
     property var history: []
@@ -28,6 +31,19 @@ Singleton {
     // Only a safety cap; past it the oldest entries go
     readonly property int maxHistory: 200
     readonly property int maxPopups: 3
+    // How long an entry stays in the history, in ms; one still on a banner waits for it to go
+    readonly property int historyLifetime: 5 * 60 * 1000
+    // Claude Code's sounds are played here rather than by the extension, which only shows the
+    // banners: at volumes of their own, and only along with a banner. 1 is full volume. Finished
+    // (or idle at the prompt):
+    readonly property real claudeFinishVolume: 0.45
+    // Waiting on you: a permission, or a question (which comes as a permission for AskUserQuestion)
+    readonly property real claudeWaitingVolume: 0.6
+    // When the next entry is due to leave (ms since the epoch), or 0 for none
+    readonly property real nextExpiry: {
+        const times = history.filter(e => !popups.includes(e)).map(e => e.time);
+        return times.length > 0 ? Math.min(...times) + historyLifetime : 0;
+    }
     // Saving waits for the history to load, or it would overwrite it
     property bool loaded: false
     // Notifications carried over a reload, waiting for the history they belong to
@@ -99,8 +115,15 @@ Singleton {
             history = kept.slice(0, maxHistory);
             unread = true;
         }
-        if (!silenced)
-            popups = [entry, ...popups].slice(0, maxPopups);
+        if (!paused) {
+            // A burst from one conversation shares a banner: the newest shows, counting the ones
+            // that came before it while it was up
+            const same = previous ? null : popups.find(e => burstKey(e) === burstKey(entry));
+            entry.burst = previous?.burst ?? (same ? (same.burst ?? 1) + 1 : 1);
+            popups = [entry, ...popups.filter(e => e !== same)].slice(0, maxPopups);
+            if (claudeProject(entry) !== null)
+                playClaudeSound(entry);
+        }
         save();
     }
 
@@ -117,6 +140,13 @@ Singleton {
         });
         popups = popups.filter(e => e.notification !== n);
         save();
+    }
+
+    // What makes notifications one conversation: the app, the title (a chat, a sender, a Claude
+    // project) and how urgent
+    function burstKey(entry: var): string {
+        const n = entry.notification;
+        return [appOf(entry), n ? n.summary : entry.summary, n ? n.urgency : entry.urgency].join("\n");
     }
 
     function hidePopup(entry: var) {
@@ -139,6 +169,66 @@ Singleton {
         save();
     }
 
+    // Claude Code's banners come from the Claude Code Notifier extension in VS Code, which posts
+    // them with plain notify-send (so under its name), titled "Claude Code — project". The
+    // project ("" without one), or null for any other notification
+    function claudeProject(entry: var): var {
+        const n = entry.notification;
+        if ((n ? n.appName : entry.appName) !== "notify-send")
+            return null;
+        const match = (n ? n.summary : entry.summary ?? "").match(/^Claude Code(?: — (.+))?$/);
+        return match ? match[1] ?? "" : null;
+    }
+
+    // Claude finished ("Claude finished and is waiting for you") or idles at the prompt ("Claude
+    // is waiting for your input")
+    function claudeFinished(entry: var): bool {
+        return claudeProject(entry) !== null && /waiting for you/.test(entry.body ?? "");
+    }
+
+    // The finish sound, or the two-tone chime when Claude is waiting on you
+    function playClaudeSound(entry: var) {
+        const finished = claudeFinished(entry);
+        const volume = finished ? claudeFinishVolume : claudeWaitingVolume;
+        Quickshell.execDetached(["paplay", "--volume=" + Math.round(65536 * volume), "/usr/share/sounds/freedesktop/stereo/" + (finished ? "complete" : "message") + ".oga"]);
+    }
+
+    // The app's name as shown
+    function appNameOf(entry: var): string {
+        if (claudeProject(entry) !== null)
+            return "Claude Code";
+        return (entry.notification ? entry.notification.appName : entry.appName) ?? "";
+    }
+
+    // The app an entry is grouped under in the history
+    function appOf(entry: var): string {
+        return appNameOf(entry) || "Other";
+    }
+
+    // Every entry from one app
+    function clearApp(app: string) {
+        const gone = history.filter(e => appOf(e) === app);
+        history = history.filter(e => appOf(e) !== app);
+        popups = popups.filter(e => appOf(e) !== app);
+        save();
+        for (const entry of gone)
+            entry.notification?.dismiss();
+    }
+
+    // Entries past `historyLifetime` leave, the app's notification with them
+    function expire() {
+        const cutoff = Date.now() - historyLifetime;
+        const gone = history.filter(e => e.time <= cutoff && !popups.includes(e));
+        if (gone.length === 0)
+            return;
+        history = history.filter(e => !gone.includes(e));
+        if (history.length === 0)
+            unread = false;
+        save();
+        for (const entry of gone)
+            entry.notification?.expire();
+    }
+
     // A click: the notification's own action while the app still has it (that's what opens the
     // chat), else the app itself. The entry stays
     function activate(entry: var) {
@@ -155,23 +245,26 @@ Singleton {
         hidePopup(entry);
     }
 
-    // The app behind a notification: its desktop entry hint, else its name, matched against
-    // ids and window classes and then the entries' own names ("Telegram" is
-    // org.telegram.desktop). Null until the entries have loaded
+    // The app behind a notification: its desktop entry hint (VS Code for Claude Code's), else its
+    // name, matched against ids and window classes and then the entries' own names ("Telegram"
+    // is org.telegram.desktop). Null until the entries have loaded
     function desktopEntryFor(entry: var): var {
         const apps = DesktopEntries.applications.values;
         if (apps.length === 0)
             return null;
-        const hint = entry.notification?.desktopEntry || entry.desktopEntry || "";
+        const hint = claudeProject(entry) !== null ? "com.microsoft.VSCode" : entry.notification?.desktopEntry || entry.desktopEntry || "";
         const name = entry.notification?.appName || entry.appName || "";
         return (hint !== "" ? DesktopEntries.heuristicLookup(hint) : null) ?? (name !== "" ? DesktopEntries.heuristicLookup(name) : null) ?? apps.find(a => a.name.toLowerCase() === name.toLowerCase()) ?? null;
     }
 
-    // Focuses the app's window, or starts the app when it has none
+    // Focuses the app's window, or starts the app when it has none. Claude Code's go to the
+    // window with the project open, as the bar's Claude chips do
     function follow(entry: var) {
         const desktop = desktopEntryFor(entry);
         const names = [desktop?.startupClass, desktop?.id, entry.appName].filter(s => s).map(s => s.toLowerCase());
-        const window = Hyprland.toplevels.values.find(t => names.includes((t.wayland?.appId || t.lastIpcObject?.class || "").toLowerCase()));
+        const windows = Hyprland.toplevels.values.filter(t => names.includes((t.wayland?.appId || t.lastIpcObject?.class || "").toLowerCase()));
+        const project = claudeProject(entry);
+        const window = (project ? Claude.windowFor(project) : null) ?? windows[0];
         if (window)
             Focus.run(["focuswindow address:0x" + window.address]);
         else
@@ -205,10 +298,22 @@ Singleton {
     }
 
     onSilencedChanged: {
-        if (silenced)
-            popups = [];
-        else
+        if (!silenced)
             silencedUntil = 0;
+    }
+    onPausedChanged: {
+        if (paused)
+            popups = [];
+    }
+    // An entry held by its banner may be due already
+    onPopupsChanged: expire()
+
+    // Timers can fire a little before Date.now() says the entry is due, which would leave it and
+    // stop; so this one waits a second longer, and the 30-second ticker below sweeps up as well
+    Timer {
+        running: root.nextExpiry > 0
+        interval: Math.max(0, root.nextExpiry - Date.now()) + 1000
+        onTriggered: root.expire()
     }
 
     Timer {
@@ -221,7 +326,10 @@ Singleton {
         interval: 30000
         running: true
         repeat: true
-        onTriggered: root.now = Date.now()
+        onTriggered: {
+            root.now = Date.now();
+            root.expire();
+        }
     }
 
     NotificationServer {

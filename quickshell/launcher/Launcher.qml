@@ -14,9 +14,9 @@ import qs.services
 // (the row scrolls when they don't fit), Up and Down go through the list, typing searches it and
 // Enter launches the selection. Open windows matching the query come first, and Enter switches
 // to them instead of starting another; arithmetic ("2*21") shows its result on top, which Enter
-// copies; when nothing matches, Enter searches the web. A right click or Shift+Enter on an app
-// lists its own actions ("New Private Window"). Escape, SUPER + R again or a click outside the
-// panel closes it.
+// copies; when nothing matches, Enter searches the web; "> command" runs the command in a new
+// kitty window. A right click or Shift+Enter on an app lists its own actions ("New Private
+// Window"). Escape, SUPER + R again or a click outside the panel closes it.
 Overlay {
     id: root
 
@@ -49,6 +49,8 @@ Overlay {
     // Matching windows listed at most
     readonly property int shownWindows: 4
 
+    // Where pinned folders open (rules/FolderWorkspaces.qml)
+    property var folderWorkspaces
     // Where the arrows and Enter act: "pinned" or "list"
     property string area: "pinned"
     property int pinnedIndex: 0
@@ -115,6 +117,13 @@ Overlay {
     // apps, then a web search when nothing matches
     readonly property var rows: {
         const q = query.trim();
+        if (q.startsWith(">"))
+            return [
+                {
+                    kind: "command",
+                    command: q.slice(1).trim()
+                }
+            ];
         const answer = calculate(q);
         return [...(answer === null ? [] : [
                     {
@@ -259,8 +268,13 @@ Overlay {
             launch(row.entry, "");
             return;
         }
+        if (row.kind === "command" && row.command === "")
+            return;
         close();
-        if (row.kind === "window")
+        // Its own class, so the kitty rule doesn't send it to the scratchpad; held open to read
+        if (row.kind === "command")
+            Quickshell.execDetached(["kitty", "--class", "launcher-command", "--hold", "sh", "-c", row.command]);
+        else if (row.kind === "window")
             Focus.run(["focuswindow address:0x" + row.toplevel.address]);
         else if (row.kind === "calc")
             Quickshell.execDetached(["wl-copy", row.value]);
@@ -282,6 +296,10 @@ Overlay {
             entry.execute();
             return;
         }
+        // Onto the folder's workspace first, so the window opens there rather than moving later
+        const workspace = folderWorkspaces?.workspaceOf(folder) ?? 0;
+        if (workspace !== 0)
+            Hyprland.dispatch("workspace " + workspace);
         // `command` comes without the Exec line's field codes (%F)
         Quickshell.execDetached([...entry.command, Quickshell.env("HOME") + "/" + folder]);
     }
@@ -629,6 +647,8 @@ Overlay {
                 return root.marked(modelData.toplevel.title, modelData.at);
             if (kind === "calc")
                 return "= " + modelData.value;
+            if (kind === "command")
+                return modelData.command === "" ? "Type a command after the >" : "Run <b>" + root.escaped(modelData.command) + "</b>";
             return `Search the web for “${root.escaped(root.query.trim())}”`;
         }
         readonly property string generic: {
@@ -636,6 +656,8 @@ Overlay {
                 return modelData.entry.genericName;
             if (kind === "window")
                 return root.workspaceLabel(modelData.toplevel.workspace);
+            if (kind === "command")
+                return "in kitty";
             return kind === "calc" ? "Enter copies it" : "Google";
         }
 
@@ -660,9 +682,9 @@ Overlay {
             }
 
             MaterialIcon {
-                visible: row.kind === "calc" || row.kind === "web"
+                visible: row.kind === "calc" || row.kind === "web" || row.kind === "command"
                 anchors.centerIn: parent
-                text: row.kind === "calc" ? "calculate" : "travel_explore"
+                text: row.kind === "calc" ? "calculate" : row.kind === "command" ? "terminal" : "travel_explore"
                 color: Theme.accent
             }
         }

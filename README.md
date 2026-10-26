@@ -12,7 +12,8 @@ Hyprland config is split into:
 - `hypr/_rules.conf` — window rules + layer rules (file pickers float centred at 55% × 65%,
   whether the portal's window or an app's own "Open Files"-style dialog)
 
-Ideas not built yet are kept in [IDEAS.md](IDEAS.md).
+Ideas not built yet are kept in [IDEAS.md](IDEAS.md); what to delete when the disk fills up is in
+[DISK-CLEANUP.md](DISK-CLEANUP.md).
 
 ## Packages
 
@@ -28,7 +29,9 @@ Ideas not built yet are kept in [IDEAS.md](IDEAS.md).
 
 - `quickshell` — status bar (bottom, autostarted)
 - `libnotify` — `notify-send`; Quickshell is the notification daemon (see below)
-- `kitty` — terminal (`$terminal`)
+- `kitty` — terminal (`$terminal`); `kitty/kitty.conf` adds a notification when a command
+  that ran 15 s or more finishes in a kitty window you're not looking at (`notify_on_cmd_finish`;
+  clicking it brings the window back)
 - `nwg-look` — GTK theme settings
 
 ### Utilities
@@ -96,7 +99,7 @@ Tabs along the bottom, with thin dividers between the groups inside a tab:
 
 - **Left:** system (robot) · RAM | what's playing (title only, hidden when nothing plays) | focused app name
 - **Center:** workspaces
-- **Right:** bell · language | Wi-Fi · bluetooth · volume | battery | power | clock (time over date)
+- **Right:** Claude sessions | bell · language | Wi-Fi · bluetooth · volume | battery | power | clock (time over date)
 
 Panels open after a 50ms hover dwell and grow in 240ms (`hoverDelay` / `openDuration` /
 `closeDuration` in `config/Theme.qml`).
@@ -113,6 +116,12 @@ Hovering the robot or the RAM grows the left tab into a panel:
 - a chip per special workspace that's open (Hyprland drops one once its last window goes), lit
   while it's showing and with its window count past one; click to toggle it. `kitty` (the
   terminal scratchpad) and `trash` get their own icons
+- Docker Desktop: whether its VM is up and the memory it holds, *Quit* (a second click confirms,
+  *Quit?*) or *Start* (`systemctl --user stop|start docker-desktop`), and each compose project or
+  lone container, running ones first, with a green dot when all of it runs and yellow when part
+  does. Its button starts or stops it (`docker start|stop`, or `docker compose -p NAME
+  start|stop` for a project); stopping takes a second click (*Stop?*). Read every 3 seconds while
+  the panel is open (`bar/controls/DockerList.qml`)
 
 Clicking the robot or a gauge opens `htop`.
 
@@ -169,8 +178,9 @@ player's own where it has a real one, else (browsers) its app's stream in the mi
 | 4 | terminal | Code 2 |
 | 5 | handyman | Utilities |
 
-1–5 are always shown; any other workspace shows its number. The active one widens into a lit
-pill, empty ones are dimmed and urgent ones turn red. Icons and names live in `kinds` in
+1–5 are always shown; any other workspace shows its number. Beside it are the icons of the apps
+open there (three at most, then a count; the tooltip names them). The active one widens into a
+lit pill, empty ones are dimmed and urgent ones turn red. Icons and names live in `kinds` in
 `bar/modules/Workspaces.qml`.
 
 ### Modules
@@ -179,6 +189,17 @@ pill, empty ones are dimmed and urgent ones turn red. Icons and names live in `k
   icon, while something records the microphone (Pipewire input streams), takes video (Pipewire
   video streams) or casts the screen (Hyprland's `screencast` event; the overview's own previews
   don't count). The tooltip names the apps; a click brings up the first one.
+- **Claude sessions** — Claude's logo and a chip per running Claude Code session with its
+  project: a turning ring while it works, a pulsing pink hand while it waits on you (a permission
+  or a question), a green check when it's done, dim once you've looked at its window since (or if
+  it finished while you were looking). The tooltip says what it's doing and for how long; a click
+  goes to its window (the VS Code window with that project, else a window with the project in its
+  title), a right click drops a chip that stayed behind. Claude Code reports to the shell through
+  the hook `quickshell/scripts/claude-status.sh`, registered in `~/.claude/settings.json` (outside
+  this repo) for SessionStart, UserPromptSubmit, PostToolUse, Notification, Stop and SessionEnd;
+  sessions are kept across restarts (`claude-sessions.json` in Quickshell's state folder) and one
+  whose `claude` process has gone drops out within a minute. A turn you interrupt keeps showing as
+  working until the next prompt, as Claude Code reports no event for it.
 - **RAM** — a memory stick that fills with the load and shifts cyan → purple → pink → red, and
   the percentage. Click brings up GNOME Resources floating at 35% × 25%, centred on the current
   workspace (an open Resources window is moved there).
@@ -204,7 +225,8 @@ quickshell/
 │                      Divider, Chip, PageSlot, CircularGauge, HistoryGraph, Equalizer,
 │                      Tooltip, TrayMenu, ThemedIcon, NotificationContent, FloatingPanel,
 │                      ContextMenu
-├── services/          Notifs (notification daemon + history), Audio (Pipewire sinks + app
+├── services/          Notifs (notification daemon + history), Claude (Claude Code sessions),
+│                      Audio (Pipewire sinks + app
 │                      streams), Players (MPRIS), SystemStats, NetworkInfo (nl80211 scan
 │                      signal), BatteryInfo (sysfs), KeyboardLayout, AudioPorts, Brightness,
 │                      Privacy (what's recording), Weather (wttr.in), Focus (no-warp focusing)
@@ -214,6 +236,8 @@ quickshell/
 │                      (SUPER + Tab), on Overlay.qml
 ├── rules/             FolderWorkspaces.qml, VS Code windows to their folder's workspace;
 │                      BatteryWarnings.qml
+├── assets/            claude.svg, the icon for Claude Code's notifications and sessions
+├── scripts/           claude-status.sh, the Claude Code hook behind the bar's Claude chips
 └── bar/               Bar.qml; one file per module in bar/modules/ (System and Controls are
                        the tabs with panels); the panels' pages in bar/controls/
 ```
@@ -241,16 +265,31 @@ masked (`systemctl --user unmask dunst` to bring it back).
 - **Banners** hang from the top edge in the top-right corner. A new one drips out of the edge:
   a narrow drop pushes down with a springy overshoot, then widens into the card. At most three
   at a time (the newest pushes out the oldest), each at most twice the height of a one-line
-  notification, the body trimmed with an ellipsis. Hovering holds them; click to follow the
+  notification, the body trimmed with an ellipsis. A burst from one conversation (the same app,
+  title and urgency: a chat, a Claude project) shares a banner, showing the newest with a count
+  (*Telegram · 3 new*). A line under each runs out with the time it has left. Hovering holds them (and fills the lines back up); click to follow the
   notification (the app's own action, e.g. open the chat, else focus or start the app);
   right-click or the cross hides the banner at once.
 - **History**: hover the bell (next to the language) for the notifications page of the controls
-  panel. Entries stay until cleared there (the cross on an entry, or *Clear*), survive restarts
-  (`~/.local/state/quickshell/.../notifications.json`) and can be clicked to follow later.
+  panel, grouped by app (the app with the newest first; a group shows its newest two until *Show
+  all*). Entries stay for five minutes unless cleared sooner (the cross on an entry, *Clear* on an
+  app's group, or *Clear all*); one still showing as a banner waits for the banner to go. They
+  survive restarts (`~/.local/state/quickshell/.../notifications.json`) and can be clicked to
+  follow later. The lifetime is `historyLifetime` in `quickshell/services/Notifs.qml`.
+- **Claude Code**: the Claude Code Notifier extension in VS Code shows a banner here when Claude
+  asks for permission, has a question (in VS Code these come as a permission for
+  AskUserQuestion) or finishes (*banner* in its settings, `claudeCodeNotifier.*.level`). The shell
+  plays the sounds itself, at volumes of its own and only along with the banner: a two-tone chime
+  at 60% when Claude is waiting on you, the finish sound at 45% (`claudeWaitingVolume` and
+  `claudeFinishVolume` in `quickshell/services/Notifs.qml`). The extension posts through plain
+  `notify-send`, so the shell recognises its banners by their title ("Claude Code — project"):
+  they're labelled Claude Code with Claude's logo (`quickshell/assets/claude.svg`), and clicking
+  one focuses the VS Code window with that project.
 - **Silence**: click the bell. It turns red and crossed out, banners stop, and notifications
   still collect in the history. A dot on the bell means something unread. Right-click it to
   silence for an hour or until 8:00 (banners come back by themselves; the tooltip says when), or
-  to turn them back on.
+  to turn them back on. Banners also pause by themselves while the screen is shared (the bell
+  turns pink), so private messages don't show up on a call.
 - Keybindings can use `qs ipc call notifications toggleSilence` and `qs ipc call notifications
   clear`. The gaming-mode messages go through `notify-send`, so they look the same.
 - **Battery**: a notification at 15% and an urgent one at 5% (it stays until dismissed), each
@@ -279,6 +318,7 @@ first (the counts rofi left in `~/.cache/rofi3.druncache`, plus its own in
   e.g. Opera's *New Private Window* or VS Code's *New Empty Window*.
 - **Calculator:** arithmetic (`2*21`, `(3 + 4)^2 / 7`) shows its result on top; Enter copies it.
 - **Web search:** when nothing matches, the only row searches Google for the query.
+- **Commands:** `> command` runs it in a new kitty window, held open to read the output.
 - **Enter** launches the selection, as does a click. **Escape**, SUPER + R again or a click
   outside the panel closes it.
 
@@ -307,9 +347,10 @@ workspaces 1–5 and any other that's open, each over the wallpaper (read from
 
 - Click a window to switch to it, or an empty spot to go to that workspace.
 - Drag a window onto another workspace to move it there (without following it).
-- The arrows or Tab step through the windows and Enter switches to the selected one; typing
-  dims the windows whose title or app doesn't hold it. Escape, SUPER + Tab again or a click
-  outside closes it.
+- The cross on a hovered window, or a middle click, closes it.
+- The arrows or Tab step through the windows, Enter switches to the selected one and Delete
+  closes it; typing dims the windows whose title or app doesn't hold it. Escape, SUPER + Tab
+  again or a click outside closes the overview.
 
 ## VS Code workspaces
 

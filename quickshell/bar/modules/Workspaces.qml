@@ -7,8 +7,9 @@ import qs.config
 import qs.components
 
 // Workspaces 1-5 are always shown with an icon for what each is used for; any other regular
-// workspace shows its number. The active one widens into a lit pill with a filled, glowing icon;
-// empty ones are dimmed.
+// workspace shows its number. Next to it, the icons of the apps open there (three at most, then
+// a count). The active one widens into a lit pill with a filled, glowing icon; empty ones are
+// dimmed.
 Tab {
     id: root
 
@@ -80,8 +81,25 @@ Tab {
         readonly property bool urgent: workspace?.urgent ?? false
         readonly property bool hovered: mouse.containsMouse
         readonly property color color: active ? Theme.accent : urgent ? Theme.red : hovered || occupied ? Theme.text2 : Theme.textDim
+        // One per app open here, { name, icon }, in the order their windows opened
+        readonly property var apps: {
+            const seen = new Map();
+            for (const window of workspace?.toplevels.values ?? []) {
+                const appId = window.wayland?.appId || window.lastIpcObject?.class || "";
+                if (appId === "" || seen.has(appId))
+                    continue;
+                const entry = DesktopEntries.heuristicLookup(appId);
+                const icon = entry?.icon ?? appId;
+                seen.set(appId, {
+                    name: entry?.name ?? appId,
+                    icon: icon.startsWith("/") ? "file://" + icon : Quickshell.iconPath(icon, "application-x-executable")
+                });
+            }
+            return [...seen.values()];
+        }
+        readonly property int shownApps: Math.min(apps.length, 3)
 
-        implicitWidth: active ? 56 : 40
+        implicitWidth: (active ? 56 : 40) + (apps.length === 0 ? 0 : 4 + shownApps * 18 + (apps.length > shownApps ? 18 : 0))
         height: parent.height
 
         Behavior on implicitWidth {
@@ -108,21 +126,58 @@ Tab {
             }
         }
 
-        MaterialIcon {
-            visible: button.kind !== null
+        Row {
             anchors.centerIn: parent
-            text: button.kind?.icon ?? ""
-            fill: button.active || button.hovered ? 1 : 0
-            glow: button.active ? 0.9 : 0
-            color: button.color
-        }
+            spacing: 4
 
-        StyledText {
-            visible: button.kind === null
-            anchors.centerIn: parent
-            text: button.modelData.id > 0 ? String(button.modelData.id) : button.modelData.name
-            font.bold: true
-            color: button.color
+            MaterialIcon {
+                visible: button.kind !== null
+                anchors.verticalCenter: parent.verticalCenter
+                text: button.kind?.icon ?? ""
+                fill: button.active || button.hovered ? 1 : 0
+                glow: button.active ? 0.9 : 0
+                color: button.color
+            }
+
+            StyledText {
+                visible: button.kind === null
+                anchors.verticalCenter: parent.verticalCenter
+                text: button.modelData.id > 0 ? String(button.modelData.id) : button.modelData.name
+                font.bold: true
+                color: button.color
+            }
+
+            Row {
+                visible: button.apps.length > 0
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 2
+                opacity: button.active || button.hovered ? 1 : 0.7
+
+                Repeater {
+                    model: button.apps.slice(0, button.shownApps)
+
+                    Image {
+                        required property var modelData
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 16
+                        height: 16
+                        sourceSize.width: 16
+                        sourceSize.height: 16
+                        source: modelData.icon
+                        asynchronous: true
+                    }
+                }
+
+                StyledText {
+                    visible: button.apps.length > button.shownApps
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "+" + (button.apps.length - button.shownApps)
+                    color: button.color
+                    font.pixelSize: 11
+                    font.bold: true
+                }
+            }
         }
 
         MouseArea {
@@ -141,7 +196,7 @@ Tab {
             id: tooltip
 
             target: button
-            text: button.kind?.name ?? "Workspace " + button.modelData.name
+            text: (button.kind?.name ?? "Workspace " + button.modelData.name) + (button.apps.length === 0 ? "" : " · " + button.apps.map(app => app.name).join(", "))
             hovered: mouse.containsMouse
         }
     }

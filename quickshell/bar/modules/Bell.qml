@@ -6,7 +6,8 @@ import qs.services
 
 // Notifications: hovering opens their history in the controls panel; a click silences them,
 // turning the bell red and crossed out. A right click offers a silence that ends by itself (an
-// hour, or until 8:00), shown in the tooltip. Lit while there's something unread.
+// hour, or until 8:00), shown in the tooltip. Paused (in pink) while the screen is shared, and
+// lit while there's something unread.
 TabItem {
     id: root
 
@@ -59,10 +60,14 @@ TabItem {
             Notifs.silenceUntil(0);
     }
 
-    icon: Notifs.silenced ? "notifications_off" : Notifs.unread ? "notifications_unread" : "notifications"
-    iconColor: Notifs.silenced ? Theme.red : Notifs.unread ? Theme.accent : Theme.text2
-    accentColor: Notifs.silenced ? Theme.red : Theme.accent
-    tooltip: !Notifs.silenced ? "" : Notifs.silencedUntil > 0 ? "Silenced until " + Qt.formatTime(new Date(Notifs.silencedUntil), "hh:mm") : "Silenced"
+    icon: Notifs.silenced ? "notifications_off" : Notifs.paused ? "notifications_paused" : Notifs.unread ? "notifications_unread" : "notifications"
+    iconColor: Notifs.silenced ? Theme.red : Notifs.paused ? Theme.pink : Notifs.unread ? Theme.accent : Theme.text2
+    accentColor: Notifs.silenced ? Theme.red : Notifs.paused ? Theme.pink : Theme.accent
+    tooltip: {
+        if (Notifs.silenced)
+            return Notifs.silencedUntil > 0 ? "Silenced until " + Qt.formatTime(new Date(Notifs.silencedUntil), "hh:mm") : "Silenced";
+        return Notifs.paused ? "Paused while the screen is shared" : "";
+    }
     onClicked: button => {
         if (button === Qt.LeftButton)
             Notifs.silenced = !Notifs.silenced;

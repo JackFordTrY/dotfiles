@@ -10,8 +10,8 @@ import qs.bar.controls
 
 // The left tab: the robot and RAM in use, the title of what's playing, and the focused app's
 // name at the right end. Hovering the robot or the RAM grows the tab into a panel with CPU,
-// memory and disk gauges, a two-minute usage graph, the busiest processes and the special
-// workspace toggles; hovering the title shows the media page there instead (cover, timeline,
+// memory and disk gauges, a two-minute usage graph, the busiest processes, Docker Desktop and its
+// containers, and the special workspace toggles; hovering the title shows the media page there instead (cover, timeline,
 // controls), opening and closing in 125ms.
 Popout {
     id: root
@@ -228,6 +228,11 @@ Popout {
                     active: root.open && root.shownPage === "system"
                 }
 
+                DockerList {
+                    width: parent.width
+                    active: root.open && root.shownPage === "system"
+                }
+
                 // The special workspaces that are open (Hyprland drops one once its last window
                 // goes), lit while showing, with their window count past one
                 Row {
@@ -247,7 +252,7 @@ Popout {
 
                             icon: ({
                                     kitty: "terminal",
-                                    trash: "delete"
+                                    scratchpad: "sticky_note_2"
                                 })[name] ?? "layers"
                             text: name.charAt(0).toUpperCase() + name.slice(1) + (windows > 1 ? " · " + windows : "")
                             active: root.activeSpecial === name

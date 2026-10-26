@@ -17,6 +17,9 @@ PanelWindow {
     property bool open: false
     property string placeholder: "Search"
     property real panelWidth: 640
+    // Quicker than the bar's panels: it's summoned from the keyboard and should be there at once
+    readonly property int openDuration: 140
+    readonly property int closeDuration: 90
     readonly property string query: search.text
     default property alias content: column.data
     property alias above: above.data
@@ -78,7 +81,7 @@ PanelWindow {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: root.open ? Theme.openDuration : Theme.closeDuration
+                duration: root.open ? root.openDuration : root.closeDuration
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: root.open ? Theme.emphasized : Theme.emphasizedAccel
             }
@@ -86,7 +89,7 @@ PanelWindow {
 
         Behavior on scale {
             NumberAnimation {
-                duration: root.open ? Theme.openDuration : Theme.closeDuration
+                duration: root.open ? root.openDuration : root.closeDuration
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: root.open ? Theme.emphasized : Theme.emphasizedAccel
             }

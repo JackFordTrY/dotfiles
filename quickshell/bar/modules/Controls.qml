@@ -6,7 +6,8 @@ import qs.components
 import qs.services
 import qs.bar.controls
 
-// The right tab: a red dot while something records, the notification bell, language, the Wi-Fi /
+// The right tab: a red dot while something records, the Claude Code sessions, the notification
+// bell, language, the Wi-Fi /
 // Bluetooth / volume icons, battery, power and clock. Hovering or clicking one of those three
 // icons grows the tab into a panel with a tile for each (the tile's icon switches it on and off,
 // the rest of the tile picks its page), a brightness slider, that page, and the system tray along
@@ -315,6 +316,15 @@ Popout {
 
     Divider {
         visible: recording.visible
+    }
+
+    // Only while Claude Code sessions are running
+    ClaudeSessions {
+        id: claude
+    }
+
+    Divider {
+        visible: claude.visible
     }
 
     Bell {
